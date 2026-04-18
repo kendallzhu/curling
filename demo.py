@@ -1,9 +1,9 @@
-import numpy as np
 import pygame
 
 from physics import run_sim
 from scoring import get_score
-from state import SheetStates, Velocities, empty_board, Throw
+from presets import demo_collisions_sheet_states, guard_sheet_states
+from state import empty_board
 from user_interface import (
     render_sheet,
     render_ui,
@@ -14,56 +14,9 @@ from user_interface import (
 
 
 if __name__ == "__main__":
-    demo_collisions_sheet_states = SheetStates(
-        team=np.array([[0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1]]),
-        x=np.array(
-            [
-                [
-                    0.5,
-                    1.0,
-                    1.5,
-                    2.0,
-                    2.5,
-                    3.0,
-                    15.0,
-                    15.5,
-                    15.0,
-                    15.5,
-                    15.0,
-                    15.5,
-                    15.0,
-                    15.5,
-                ]
-            ]
-        ),
-        y=np.array(
-            [[2.5, 2.3, 2.7, 2.4, 2.6, 2.5, 2.8, 1.5, 1, 2.4, 3.8, 4, 2.3, 3.2]]
-        ),
-        velocities=Velocities(
-            v=np.array(
-                [[2.5, 2.3, 2.8, 2.5, 2.2, 3.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]]
-            ),
-            theta=np.array(
-                [[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]]
-            ),
-        ),
-        rotation_directions=np.array([[1, -1, 1, -1, 1, -1, 0, 0, 0, 0, 0, 0, 0, 0]]),
-    )
-
-    guard_sheet_states = SheetStates(
-        team=np.array([[0, 1]]),
-        x=np.array([[36.6, 39.6]]),
-        y=np.array([[2.5, 2.5]]),
-        velocities=Velocities(
-            v=np.array([[0.0, 0.0]]),
-            theta=np.array([[0.0, 0.0]]),
-        ),
-        rotation_directions=np.array([[0, 0]]),
-    )
-
     pygame.init()
     screen = pygame.display.set_mode((1800, 900 + PANEL_H), pygame.RESIZABLE)
-    current_sheet_states = guard_sheet_states  # empty_board(1)
+    current_sheet_states = guard_sheet_states()  # empty_board(1)
     timestep = 0.1
 
     # UI state
@@ -77,7 +30,14 @@ if __name__ == "__main__":
             if event.type == pygame.QUIT:
                 pygame.quit()
                 exit()
-            ui_state = handle_mouse_input(event, screen, ui_state, score, current_sheet_states)
+            ui_state, current_sheet_states = handle_mouse_input(
+                event,
+                screen,
+                ui_state,
+                score,
+                current_sheet_states,
+                preset_states=(demo_collisions_sheet_states, guard_sheet_states),
+            )
 
         render_sheet(screen, current_sheet_states)
         render_ui(screen, ui_state, score, next_team_to_play)

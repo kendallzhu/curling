@@ -11,7 +11,7 @@ from constants import (
     STONE_RADIUS_M,
     ROTATION_RATE,
 )
-from state import Throw
+from state import Throw, empty_board
 
 PANEL_H = 80  # pixels of control panel below the sheet
 RED_TEAM_COLOR = (200, 50, 50)
@@ -197,6 +197,40 @@ def render_add_stone_preview(surface, throw: Throw):
         pygame.draw.line(surface, color, (curl_end_x, curl_end_y), (curl_left_x, curl_left_y), 2)
         pygame.draw.line(surface, color, (curl_end_x, curl_end_y), (curl_right_x, curl_right_y), 2)
 
+def get_preset_button_rects():
+    x0 = 20
+    y0 = 20
+    empty_rect = pygame.Rect(x0, y0, 80, 40)
+    preset1_rect = pygame.Rect(x0 + 90, y0, 40, 40)
+    preset2_rect = pygame.Rect(x0 + 140, y0, 40, 40)
+    return empty_rect, preset1_rect, preset2_rect
+
+
+def render_preset_buttons(surface):
+    empty_rect, preset1_rect, preset2_rect = get_preset_button_rects()
+    font = pygame.font.SysFont(None, 24)
+
+    pygame.draw.rect(surface, (80, 160, 80), empty_rect, border_radius=6)
+    surface.blit(
+        font.render("empty", True, (255, 255, 255)),
+        (empty_rect.x + 8, empty_rect.y + 10),
+    )
+
+    pygame.draw.rect(surface, (80, 80, 160), preset1_rect, border_radius=6)
+    surface.blit(
+        font.render("1", True, (255, 255, 255)),
+        (preset1_rect.x + 12, preset1_rect.y + 10),
+    )
+
+    pygame.draw.rect(surface, (80, 80, 160), preset2_rect, border_radius=6)
+    surface.blit(
+        font.render("2", True, (255, 255, 255)),
+        (preset2_rect.x + 12, preset2_rect.y + 10),
+    )
+
+    return empty_rect, preset1_rect, preset2_rect
+
+
 def draw_panel(surface, angle, speed, y_val, turn_val, score):
     sw, sh = surface.get_size()
     panel_y = sh - PANEL_H
@@ -281,6 +315,7 @@ def draw_panel(surface, angle, speed, y_val, turn_val, score):
 def render_ui(surface, ui_state: UIState, score, next_team: int):
     throw = ui_state.to_next_throw(next_team)
     render_add_stone_preview(surface, throw)
+    render_preset_buttons(surface)
     return draw_panel(
         surface,
         ui_state.angle_val,
@@ -301,10 +336,19 @@ def add_stone(state, throw: Throw):
     state.velocities.theta = np.append(state.velocities.theta, [[angle_rad]], axis=1)
     state.rotation_directions = np.append(state.rotation_directions, [[throw.turn]], axis=1)
 
-def handle_mouse_input(event, screen, ui_state, score, current_sheet_states):
+def handle_mouse_input(event, screen, ui_state, score, current_sheet_states, preset_states=()):
+    next_sheet_states = current_sheet_states
     if event.type == pygame.MOUSEBUTTONDOWN:
         mx, my = event.pos
-        btn_rect, (ax, ay, aw), (sx, sy, sw_), (yx, yy, yw), turn_rect = draw_panel(screen, ui_state.angle_val, ui_state.speed_val, ui_state.y_val, ui_state.turn_val, score)
+        empty_rect, preset1_rect, preset2_rect = get_preset_button_rects()
+        btn_rect, (ax, ay, aw), (sx, sy, sw_), (yx, yy, yw), turn_rect = draw_panel(
+            screen,
+            ui_state.angle_val,
+            ui_state.speed_val,
+            ui_state.y_val,
+            ui_state.turn_val,
+            score,
+        )
 
         angle_knob_x = int(ax + normalize(ui_state.angle_val, min_release_angle, max_release_angle) * aw)
         speed_knob_x = int(sx + normalize(ui_state.speed_val, min_release_speed, max_release_speed) * sw_)
@@ -321,6 +365,14 @@ def handle_mouse_input(event, screen, ui_state, score, current_sheet_states):
                 team=next_team_to_play,
             )
             add_stone(current_sheet_states, throw)
+        elif empty_rect.collidepoint(mx, my):
+            next_sheet_states = empty_board(current_sheet_states.x.shape[0])
+        elif preset1_rect.collidepoint(mx, my) and len(preset_states) > 0:
+            preset = preset_states[0]
+            next_sheet_states = preset() if callable(preset) else preset
+        elif preset2_rect.collidepoint(mx, my) and len(preset_states) > 1:
+            preset = preset_states[1]
+            next_sheet_states = preset() if callable(preset) else preset
         elif abs(mx - angle_knob_x) < 12 and abs(my - ay) < 12:
             ui_state.dragging_angle = True
         elif abs(mx - speed_knob_x) < 12 and abs(my - sy) < 12:
@@ -348,4 +400,4 @@ def handle_mouse_input(event, screen, ui_state, score, current_sheet_states):
             t = max(0.0, min(1.0, (mx - yx) / yw))
             ui_state.y_val = denormalize(t, min_release_y, max_release_y)
 
-    return ui_state
+    return ui_state, next_sheet_states
