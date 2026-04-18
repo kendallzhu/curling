@@ -36,7 +36,7 @@ class SheetStates:
     def team_with_fewer_stones(self):
         return 0 if self.num_stones(0) < self.num_stones(1) else 1
 
-    def get_sheet(self, sim_index=0) -> SheetState:
+    def get_sheet(self, sim_index: int) -> SheetState:
         stones = []
         for i in range(len(self.x[sim_index])):
             stones.append(StoneState(

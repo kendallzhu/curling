@@ -21,6 +21,7 @@ if __name__ == "__main__":
 
     # UI state
     ui_state = UIState()
+    sim_index = 0
 
     while True:
         next_team_to_play = current_sheet_states.team_with_fewer_stones()
@@ -39,13 +40,13 @@ if __name__ == "__main__":
                 preset_states=(demo_collisions_sheet_states, guard_sheet_states),
             )
 
-        render_sheet(screen, current_sheet_states.get_sheet())
+        render_sheet(screen, current_sheet_states.get_sheet(sim_index))
         render_ui(screen, ui_state, score, next_team_to_play)
         pygame.display.flip()
         actual_timesteps, current_sheet_states = run_sim(
             sheet_states=current_sheet_states, max_frame_time=timestep
         )
         speedup = 10
-        pygame.time.wait(int(actual_timesteps[0][0] * 1000) // speedup)
+        pygame.time.wait(int(actual_timesteps[sim_index] * 1000) // speedup)
 
     pygame.quit()
