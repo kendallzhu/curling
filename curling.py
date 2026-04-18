@@ -120,6 +120,12 @@ def denormalize(normalized, min, max):
 min_release_angle = -4
 max_release_angle = 4
 
+min_release_speed = 1.8
+max_release_speed = 4.0
+
+min_release_y = 2.25
+max_release_y = 2.75
+
 
 def draw_panel(surface, angle, speed, y_val, turn_val, score):
     sw, sh = surface.get_size()
@@ -157,7 +163,7 @@ def draw_panel(surface, angle, speed, y_val, turn_val, score):
     pygame.draw.rect(
         surface, (100, 100, 100), (speed_x, slider_y - 4, slider_w, 8), border_radius=4
     )
-    speed_t = (speed - 1.8) / (4.0 - 1.8)  # 0..1
+    speed_t = normalize(speed, min_release_speed, max_release_speed)
     pygame.draw.circle(
         surface, (200, 200, 200), (int(speed_x + speed_t * slider_w), slider_y), 10
     )
@@ -171,7 +177,7 @@ def draw_panel(surface, angle, speed, y_val, turn_val, score):
     pygame.draw.rect(
         surface, (100, 100, 100), (y_x, slider_y - 4, slider_w, 8), border_radius=4
     )
-    y_t = (y_val - 2.5 + 0.25) / 0.5  # 0..1
+    y_t = normalize(y_val, min_release_y, max_release_y)
     pygame.draw.circle(
         surface, (200, 200, 200), (int(y_x + y_t * slider_w), slider_y), 10
     )
@@ -290,6 +296,10 @@ if __name__ == "__main__":
                     draw_panel(screen, angle_val, speed_val, y_val, turn_val, score)
                 )
 
+                angle_knob_x = int(ax + normalize(angle_val, min_release_angle, max_release_angle) * aw)
+                speed_knob_x = int(sx + normalize(speed_val, min_release_speed, max_release_speed) * sw_)
+                y_knob_x = int(yx + normalize(y_val, min_release_y, max_release_y) * yw)
+
                 if btn_rect.collidepoint(mx, my):
                     add_stone(
                         current_sheet_states,
@@ -299,31 +309,11 @@ if __name__ == "__main__":
                         y_val,
                         team=next_team_to_play,
                     )
-                elif (
-                    abs(
-                        mx
-                        - int(
-                            ax
-                            + (
-                                (angle_val - min_release_angle)
-                                / (max_release_angle - min_release_angle)
-                            )
-                            * aw
-                        )
-                    )
-                    < 12
-                    and abs(my - ay) < 12
-                ):
+                elif abs(mx - angle_knob_x) < 12 and abs(my - ay) < 12:
                     dragging_angle = True
-                elif (
-                    abs(mx - int(sx + ((speed_val - 1.8) / 2.2) * sw_)) < 12
-                    and abs(my - sy) < 12
-                ):
+                elif abs(mx - speed_knob_x) < 12 and abs(my - sy) < 12:
                     dragging_speed = True
-                elif (
-                    abs(mx - int(yx + ((y_val - 2.25) / 0.5) * yw)) < 12
-                    and abs(my - yy) < 12
-                ):
+                elif abs(mx - y_knob_x) < 12 and abs(my - yy) < 12:
                     dragging_y = True
                 elif turn_rect.collidepoint(mx, my):
                     turn_val = {1: -1, -1: 0, 0: 1}[turn_val]  # cycle through
@@ -345,10 +335,10 @@ if __name__ == "__main__":
                     angle_val = denormalize(t, min_release_angle, max_release_angle)
                 if dragging_speed:
                     t = max(0.0, min(1.0, (mx - sx) / sw_))
-                    speed_val = 1.8 + t * 2.2
+                    speed_val = denormalize(t, min_release_speed, max_release_speed)
                 if dragging_y:
                     t = max(0.0, min(1.0, (mx - yx) / yw))
-                    y_val = 2.25 + t * 0.5
+                    y_val = denormalize(t, min_release_y, max_release_y)
 
         render_sheet(screen, current_sheet_states)
         draw_panel(screen, angle_val, speed_val, y_val, turn_val, score)
