@@ -5,7 +5,6 @@ import pygame
 from constants import (
     starting_release_point,
     center_of_target_house,
-    house_outer_circle_radius,
     SHEET_W_M,
     SHEET_H_M,
     STONE_RADIUS_M,
@@ -14,7 +13,7 @@ from constants import (
 
 from physics import run_sim
 from scoring import get_score
-from state import SheetStates, Velocities
+from state import SheetStates, Velocities, empty_board
 
 PANEL_H = 80  # pixels of control panel below the sheet
 RED_TEAM_COLOR = (200, 50, 50)
