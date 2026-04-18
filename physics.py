@@ -110,6 +110,8 @@ def run_to_next_collision_or_stop(
     c = sheet_states.rotation_directions[sim_done_mask, :] / r_p * frac_pivot_time
 
     num_sims, num_stones = v.shape
+    if team.shape[1] == 0:
+        return np.zeros((num_sims, 1)), sheet_states
 
     time_to_stop = v / (mu * g)
     next_stop_time = np.min(np.where(v > 0, time_to_stop, np.inf), axis=1)
@@ -153,7 +155,7 @@ def run_to_next_collision_or_stop(
         v > 0, c * v * time_to_next_event - c * mu * g / 2 * time_to_next_event**2, 0
     )
     x += (np.sin(theta_new) - np.sin(theta)) / c
-    y -= (np.cos(theta) - np.cos(theta_new)) / c
+    y += (np.cos(theta) - np.cos(theta_new)) / c
     theta = theta_new
     v = np.fmax(v - mu * g * time_to_next_event, 0)
     sims_with_collisions = np.arange(num_sims, dtype=int)[next_event_is_collision]
@@ -192,6 +194,9 @@ def run_sim(
     y = sheet_states.y
     num_sims, num_stones = v.shape
 
+    if team.shape[1] == 0:
+        return np.zeros((num_sims, 1)), sheet_states
+
     time_to_stop = v / (mu * g)
     next_stop_time = np.min(np.where(v > 0, time_to_stop, np.inf), axis=1)
     next_collision_time = np.ones(num_sims) * np.inf
@@ -228,7 +233,7 @@ def run_sim(
         next_collision_time, np.fmin(next_stop_time, max_frame_time)
     ).reshape((num_sims, 1))
     x += np.cos(theta) * v * time_to_next_event
-    y -= np.sin(theta) * v * time_to_next_event
+    y += np.sin(theta) * v * time_to_next_event
     theta += (
         sheet_states.rotation_directions
         / r_p
