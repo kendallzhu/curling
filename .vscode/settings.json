@@ -3,6 +3,10 @@
         "/^cd /home/kzhu/curling && python3 -m py_compile curling\\.py user_interface\\.py$/": {
             "approve": true,
             "matchCommandLine": true
+        },
+        "/^cd /home/kzhu/curling && python3 -m py_compile curling\\.py demo\\.py user_interface\\.py state\\.py$/": {
+            "approve": true,
+            "matchCommandLine": true
         }
     }
 }

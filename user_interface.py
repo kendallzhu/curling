@@ -11,6 +11,7 @@ from constants import (
     STONE_RADIUS_M,
     ROTATION_RATE,
 )
+from state import Throw
 
 PANEL_H = 80  # pixels of control panel below the sheet
 RED_TEAM_COLOR = (200, 50, 50)
@@ -43,6 +44,15 @@ class UIState:
     dragging_angle: bool = False
     dragging_speed: bool = False
     dragging_y: bool = False
+
+    def to_next_throw(self, team: int) -> Throw:
+        return Throw(
+            angle_deg=self.angle_val,
+            speed=self.speed_val,
+            turn=self.turn_val,
+            y_val=self.y_val,
+            team=team,
+        )
 
 
 def render_sheet(surface: pygame.Surface, state) -> None:
@@ -129,8 +139,8 @@ def render_sheet(surface: pygame.Surface, state) -> None:
     draw_half(0.0, 0)
     draw_half(SHEET_W_M / 2, half_h)
 
-def render_add_stone_preview(surface, angle_deg, speed, turn, y_val, team):
-    color = RED_TEAM_COLOR if team == 0 else YELLOW_TEAM_COLOR
+def render_add_stone_preview(surface, throw: Throw):
+    color = RED_TEAM_COLOR if throw.team == 0 else YELLOW_TEAM_COLOR
     sw, sh = surface.get_size()
     half_h = sh // 2
     scale = min(sw / (SHEET_W_M / 2), half_h / SHEET_H_M)
@@ -140,9 +150,9 @@ def render_add_stone_preview(surface, angle_deg, speed, turn, y_val, team):
     def to_px(x_m, y_m):
         return int(x_m * scale) + ox, int(y_m * scale) + oy
 
-    x, y = to_px(starting_release_point, y_val)
-    angle_rad = math.radians(angle_deg)
-    length = speed * 1  # reduced scale
+    x, y = to_px(starting_release_point, throw.y_val)
+    angle_rad = math.radians(throw.angle_deg)
+    length = throw.speed * 1  # reduced scale
     dx = length * math.cos(angle_rad)
     dy = length * math.sin(angle_rad)
     end_x = x + int(dx * scale)
@@ -166,8 +176,8 @@ def render_add_stone_preview(surface, angle_deg, speed, turn, y_val, team):
     pygame.draw.line(surface, color, (end_x, end_y), (right_x, right_y), 3)
 
     # Curl indicator
-    if turn != 0:
-        curl_angle = angle_rad + (math.pi / 2 if turn == 1 else -math.pi / 2)
+    if throw.turn != 0:
+        curl_angle = angle_rad + (math.pi / 2 if throw.turn == 1 else -math.pi / 2)
         curl_length = 0.3
         curl_dx = curl_length * math.cos(curl_angle)
         curl_dy = curl_length * math.sin(curl_angle)
@@ -267,15 +277,15 @@ def draw_panel(surface, angle, speed, y_val, turn_val, score):
         turn_rect,
     )
 
-def add_stone(state, angle_deg, speed, turn, y_val, team):
-    angle_rad = math.radians(angle_deg) + np.random.normal(0, 0.001)
-    state.team = np.append(state.team, [[team]], axis=1)
+def add_stone(state, throw: Throw):
+    angle_rad = math.radians(throw.angle_deg) + np.random.normal(0, 0.001)
+    state.team = np.append(state.team, [[throw.team]], axis=1)
     state.x = np.append(state.x, [[starting_release_point]], axis=1)
-    state.y = np.append(state.y, [[y_val]], axis=1)
-    speed = speed + np.random.normal(0, 0.005)
+    state.y = np.append(state.y, [[throw.y_val]], axis=1)
+    speed = throw.speed + np.random.normal(0, 0.005)
     state.velocities.v = np.append(state.velocities.v, [[speed]], axis=1)
     state.velocities.theta = np.append(state.velocities.theta, [[angle_rad]], axis=1)
-    state.rotation_directions = np.append(state.rotation_directions, [[turn]], axis=1)
+    state.rotation_directions = np.append(state.rotation_directions, [[throw.turn]], axis=1)
 
 def handle_mouse_input(event, screen, ui_state, score, current_sheet_states):
     if event.type == pygame.MOUSEBUTTONDOWN:
@@ -289,7 +299,14 @@ def handle_mouse_input(event, screen, ui_state, score, current_sheet_states):
         next_team_to_play = current_sheet_states.team_with_fewer_stones()
 
         if btn_rect.collidepoint(mx, my):
-            add_stone(current_sheet_states, ui_state.angle_val, ui_state.speed_val, ui_state.turn_val, ui_state.y_val, team=next_team_to_play)
+            throw = Throw(
+                angle_deg=ui_state.angle_val,
+                speed=ui_state.speed_val,
+                turn=ui_state.turn_val,
+                y_val=ui_state.y_val,
+                team=next_team_to_play,
+            )
+            add_stone(current_sheet_states, throw)
         elif abs(mx - angle_knob_x) < 12 and abs(my - ay) < 12:
             ui_state.dragging_angle = True
         elif abs(mx - speed_knob_x) < 12 and abs(my - sy) < 12:
