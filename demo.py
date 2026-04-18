@@ -6,8 +6,7 @@ from scoring import get_score
 from state import SheetStates, Velocities, empty_board, Throw
 from user_interface import (
     render_sheet,
-    render_add_stone_preview,
-    draw_panel,
+    render_ui,
     handle_mouse_input,
     PANEL_H,
     UIState,
@@ -81,9 +80,7 @@ if __name__ == "__main__":
             ui_state = handle_mouse_input(event, screen, ui_state, score, current_sheet_states)
 
         render_sheet(screen, current_sheet_states)
-        next_throw = ui_state.to_next_throw(next_team_to_play)
-        render_add_stone_preview(screen, next_throw)
-        draw_panel(screen, ui_state.angle_val, ui_state.speed_val, ui_state.y_val, ui_state.turn_val, score)
+        render_ui(screen, ui_state, score, next_team_to_play)
         pygame.display.flip()
         actual_timesteps, current_sheet_states = run_sim(
             sheet_states=current_sheet_states, max_frame_time=timestep

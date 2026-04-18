@@ -277,6 +277,20 @@ def draw_panel(surface, angle, speed, y_val, turn_val, score):
         turn_rect,
     )
 
+
+def render_ui(surface, ui_state: UIState, score, next_team: int):
+    throw = ui_state.to_next_throw(next_team)
+    render_add_stone_preview(surface, throw)
+    return draw_panel(
+        surface,
+        ui_state.angle_val,
+        ui_state.speed_val,
+        ui_state.y_val,
+        ui_state.turn_val,
+        score,
+    )
+
+
 def add_stone(state, throw: Throw):
     angle_rad = math.radians(throw.angle_deg) + np.random.normal(0, 0.001)
     state.team = np.append(state.team, [[throw.team]], axis=1)
