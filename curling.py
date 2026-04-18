@@ -117,6 +117,65 @@ def denormalize(normalized, min, max):
     return min + normalized * (max - min)
 
 
+def render_add_stone_preview(surface, angle_deg, speed, turn, y_val, team):
+    color = RED_TEAM_COLOR if team == 0 else YELLOW_TEAM_COLOR
+    sw, sh = surface.get_size()
+    half_h = sh // 2
+    scale = min(sw / (SHEET_W_M / 2), half_h / SHEET_H_M)
+    ox = (sw - int((SHEET_W_M / 2) * scale)) // 2
+    oy = 0
+
+    def to_px(x_m, y_m):
+        return int(x_m * scale) + ox, int(y_m * scale) + oy
+
+    x, y = to_px(starting_release_point, y_val)
+    angle_rad = math.radians(angle_deg)
+    length = speed * 1  # reduced scale
+    dx = length * math.cos(angle_rad)
+    dy = length * math.sin(angle_rad)
+    end_x = x + int(dx * scale)
+    end_y = y + int(dy * scale)
+
+    # Draw arrow shaft
+    pygame.draw.line(surface, color, (x, y), (end_x, end_y), 3)
+
+    # Draw arrow head
+    head_length = 0.15
+    head_width = 0.1
+    back_x = end_x - int(head_length * math.cos(angle_rad) * scale)
+    back_y = end_y - int(head_length * math.sin(angle_rad) * scale)
+    perp_x = int(head_width * (-math.sin(angle_rad)) * scale)
+    perp_y = int(head_width * math.cos(angle_rad) * scale)
+    left_x = back_x + perp_x
+    left_y = back_y + perp_y
+    right_x = back_x - perp_x
+    right_y = back_y - perp_y
+    pygame.draw.line(surface, color, (end_x, end_y), (left_x, left_y), 3)
+    pygame.draw.line(surface, color, (end_x, end_y), (right_x, right_y), 3)
+
+    # Curl indicator
+    if turn != 0:
+        curl_angle = angle_rad + (math.pi / 2 if turn == 1 else -math.pi / 2)
+        curl_length = 0.3
+        curl_dx = curl_length * math.cos(curl_angle)
+        curl_dy = curl_length * math.sin(curl_angle)
+        curl_end_x = end_x + int(curl_dx * scale)
+        curl_end_y = end_y + int(curl_dy * scale)
+        pygame.draw.line(surface, color, (end_x, end_y), (curl_end_x, curl_end_y), 2)
+        # Small head for curl arrow
+        curl_head_length = 0.1
+        curl_back_x = curl_end_x - int(curl_head_length * math.cos(curl_angle) * scale)
+        curl_back_y = curl_end_y - int(curl_head_length * math.sin(curl_angle) * scale)
+        curl_perp_x = int(0.05 * (-math.sin(curl_angle)) * scale)
+        curl_perp_y = int(0.05 * math.cos(curl_angle) * scale)
+        curl_left_x = curl_back_x + curl_perp_x
+        curl_left_y = curl_back_y + curl_perp_y
+        curl_right_x = curl_back_x - curl_perp_x
+        curl_right_y = curl_back_y - curl_perp_y
+        pygame.draw.line(surface, color, (curl_end_x, curl_end_y), (curl_left_x, curl_left_y), 2)
+        pygame.draw.line(surface, color, (curl_end_x, curl_end_y), (curl_right_x, curl_right_y), 2)
+
+
 min_release_angle = -4
 max_release_angle = 4
 
@@ -341,6 +400,7 @@ if __name__ == "__main__":
                     y_val = denormalize(t, min_release_y, max_release_y)
 
         render_sheet(screen, current_sheet_states)
+        render_add_stone_preview(screen, angle_val, speed_val, turn_val, y_val, next_team_to_play)
         draw_panel(screen, angle_val, speed_val, y_val, turn_val, score)
         pygame.display.flip()
         actual_timesteps, current_sheet_states = run_sim(
