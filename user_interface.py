@@ -14,6 +14,9 @@ from constants import (
 from state import Throw, empty_board
 
 PANEL_H = 80  # pixels of control panel below the sheet
+SLIDER_BAR_HEIGHT = 10
+SLIDER_BAR_OFFSET = 5
+KNOB_CLICK_RADIUS = 12
 RED_TEAM_COLOR = (200, 50, 50)
 YELLOW_TEAM_COLOR = (200, 200, 20)
 
@@ -251,7 +254,7 @@ def draw_panel(surface, angle, speed, y_val, turn_val, score):
     slider_y = panel_y + 40
     slider_w = 200
     pygame.draw.rect(
-        surface, (100, 100, 100), (angle_x, slider_y - 4, slider_w, 8), border_radius=4
+        surface, (100, 100, 100), (angle_x, slider_y - SLIDER_BAR_OFFSET, slider_w, SLIDER_BAR_HEIGHT), border_radius=4
     )
     angle_t = normalize(angle, min_release_angle, max_release_angle)
     pygame.draw.circle(
@@ -265,7 +268,7 @@ def draw_panel(surface, angle, speed, y_val, turn_val, score):
     # Speed slider
     speed_x = 480
     pygame.draw.rect(
-        surface, (100, 100, 100), (speed_x, slider_y - 4, slider_w, 8), border_radius=4
+        surface, (100, 100, 100), (speed_x, slider_y - SLIDER_BAR_OFFSET, slider_w, SLIDER_BAR_HEIGHT), border_radius=4
     )
     speed_t = normalize(speed, min_release_speed, max_release_speed)
     pygame.draw.circle(
@@ -279,7 +282,7 @@ def draw_panel(surface, angle, speed, y_val, turn_val, score):
     # Y offset slider
     y_x = 760
     pygame.draw.rect(
-        surface, (100, 100, 100), (y_x, slider_y - 4, slider_w, 8), border_radius=4
+        surface, (100, 100, 100), (y_x, slider_y - SLIDER_BAR_OFFSET, slider_w, SLIDER_BAR_HEIGHT), border_radius=4
     )
     y_t = normalize(y_val, min_release_y, max_release_y)
     pygame.draw.circle(
@@ -339,6 +342,7 @@ def add_stone(state, throw: Throw):
 def handle_mouse_input(event, screen, ui_state, score, current_sheet_states, preset_states=()):
     next_sheet_states = current_sheet_states
     if event.type == pygame.MOUSEBUTTONDOWN:
+        # Handle mouse button down events for UI interaction
         mx, my = event.pos
         empty_rect, preset1_rect, preset2_rect = get_preset_button_rects()
         btn_rect, (ax, ay, aw), (sx, sy, sw_), (yx, yy, yw), turn_rect = draw_panel(
@@ -357,6 +361,7 @@ def handle_mouse_input(event, screen, ui_state, score, current_sheet_states, pre
         next_team_to_play = current_sheet_states.team_with_fewer_stones()
 
         if btn_rect.collidepoint(mx, my):
+            # Add stone to sheet
             throw = Throw(
                 angle_deg=ui_state.angle_val,
                 speed=ui_state.speed_val,
@@ -366,28 +371,49 @@ def handle_mouse_input(event, screen, ui_state, score, current_sheet_states, pre
             )
             add_stone(current_sheet_states, throw)
         elif empty_rect.collidepoint(mx, my):
+            # Clear sheet
             next_sheet_states = empty_board(current_sheet_states.x.shape[0])
         elif preset1_rect.collidepoint(mx, my) and len(preset_states) > 0:
+            # Load preset 1
             preset = preset_states[0]
             next_sheet_states = preset() if callable(preset) else preset
         elif preset2_rect.collidepoint(mx, my) and len(preset_states) > 1:
+            # Load preset 2
             preset = preset_states[1]
             next_sheet_states = preset() if callable(preset) else preset
-        elif abs(mx - angle_knob_x) < 12 and abs(my - ay) < 12:
+        # Define slider bar rectangles for click detection
+        angle_rect = pygame.Rect(ax, ay - SLIDER_BAR_OFFSET, aw, SLIDER_BAR_HEIGHT)
+        speed_rect = pygame.Rect(sx, sy - SLIDER_BAR_OFFSET, sw_, SLIDER_BAR_HEIGHT)
+        y_rect = pygame.Rect(yx, yy - SLIDER_BAR_OFFSET, yw, SLIDER_BAR_HEIGHT)
+        if angle_rect.collidepoint(mx, my):
+            # Handle direct clicks on slider bars to set values
+            t = max(0.0, min(1.0, (mx - ax) / aw))
+            ui_state.angle_val = denormalize(t, min_release_angle, max_release_angle)
+        if speed_rect.collidepoint(mx, my):
+            t = max(0.0, min(1.0, (mx - sx) / sw_))
+            ui_state.speed_val = denormalize(t, min_release_speed, max_release_speed)
+        if y_rect.collidepoint(mx, my):
+            t = max(0.0, min(1.0, (mx - yx) / yw))
+            ui_state.y_val = denormalize(t, min_release_y, max_release_y)
+        if abs(mx - angle_knob_x) < KNOB_CLICK_RADIUS and abs(my - ay) < KNOB_CLICK_RADIUS:
+            # Check for knob dragging initiation
             ui_state.dragging_angle = True
-        elif abs(mx - speed_knob_x) < 12 and abs(my - sy) < 12:
+        if abs(mx - speed_knob_x) < KNOB_CLICK_RADIUS and abs(my - sy) < KNOB_CLICK_RADIUS:
             ui_state.dragging_speed = True
-        elif abs(mx - y_knob_x) < 12 and abs(my - yy) < 12:
+        if abs(mx - y_knob_x) < KNOB_CLICK_RADIUS and abs(my - yy) < KNOB_CLICK_RADIUS:
             ui_state.dragging_y = True
         elif turn_rect.collidepoint(mx, my):
+            # Toggle turn direction
             ui_state.turn_val = {1: -1, -1: 0, 0: 1}[ui_state.turn_val]
 
     elif event.type == pygame.MOUSEBUTTONUP:
+        # Stop dragging on mouse up
         ui_state.dragging_angle = False
         ui_state.dragging_speed = False
         ui_state.dragging_y = False
 
     elif event.type == pygame.MOUSEMOTION and (ui_state.dragging_angle or ui_state.dragging_speed or ui_state.dragging_y):
+        # Update slider values during drag
         mx, my = event.pos
         _, (ax, ay, aw), (sx, sy, sw_), (yx, yy, yw), _ = draw_panel(screen, ui_state.angle_val, ui_state.speed_val, ui_state.y_val, ui_state.turn_val, score)
         if ui_state.dragging_angle:
