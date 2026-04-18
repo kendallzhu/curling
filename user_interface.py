@@ -1,6 +1,7 @@
 import math
 import numpy as np
 import pygame
+from dataclasses import dataclass
 
 from constants import (
     starting_release_point,
@@ -32,6 +33,17 @@ max_release_speed = 4.0
 
 min_release_y = 2.25
 max_release_y = 2.75
+
+@dataclass
+class UIState:
+    angle_val: float = 0.0
+    speed_val: float = 2.13
+    y_val: float = 2.5
+    turn_val: int = 0
+    dragging_angle: bool = False
+    dragging_speed: bool = False
+    dragging_y: bool = False
+
 
 def render_sheet(surface: pygame.Surface, state) -> None:
     sw, sh = surface.get_size()
@@ -265,44 +277,44 @@ def add_stone(state, angle_deg, speed, turn, y_val, team):
     state.velocities.theta = np.append(state.velocities.theta, [[angle_rad]], axis=1)
     state.rotation_directions = np.append(state.rotation_directions, [[turn]], axis=1)
 
-def handle_mouse_input(event, screen, angle_val, speed_val, y_val, turn_val, score, current_sheet_states, dragging_angle, dragging_speed, dragging_y):
+def handle_mouse_input(event, screen, ui_state, score, current_sheet_states):
     if event.type == pygame.MOUSEBUTTONDOWN:
         mx, my = event.pos
-        btn_rect, (ax, ay, aw), (sx, sy, sw_), (yx, yy, yw), turn_rect = draw_panel(screen, angle_val, speed_val, y_val, turn_val, score)
+        btn_rect, (ax, ay, aw), (sx, sy, sw_), (yx, yy, yw), turn_rect = draw_panel(screen, ui_state.angle_val, ui_state.speed_val, ui_state.y_val, ui_state.turn_val, score)
 
-        angle_knob_x = int(ax + normalize(angle_val, min_release_angle, max_release_angle) * aw)
-        speed_knob_x = int(sx + normalize(speed_val, min_release_speed, max_release_speed) * sw_)
-        y_knob_x = int(yx + normalize(y_val, min_release_y, max_release_y) * yw)
+        angle_knob_x = int(ax + normalize(ui_state.angle_val, min_release_angle, max_release_angle) * aw)
+        speed_knob_x = int(sx + normalize(ui_state.speed_val, min_release_speed, max_release_speed) * sw_)
+        y_knob_x = int(yx + normalize(ui_state.y_val, min_release_y, max_release_y) * yw)
 
         next_team_to_play = current_sheet_states.team_with_fewer_stones()
 
         if btn_rect.collidepoint(mx, my):
-            add_stone(current_sheet_states, angle_val, speed_val, turn_val, y_val, team=next_team_to_play)
+            add_stone(current_sheet_states, ui_state.angle_val, ui_state.speed_val, ui_state.turn_val, ui_state.y_val, team=next_team_to_play)
         elif abs(mx - angle_knob_x) < 12 and abs(my - ay) < 12:
-            dragging_angle = True
+            ui_state.dragging_angle = True
         elif abs(mx - speed_knob_x) < 12 and abs(my - sy) < 12:
-            dragging_speed = True
+            ui_state.dragging_speed = True
         elif abs(mx - y_knob_x) < 12 and abs(my - yy) < 12:
-            dragging_y = True
+            ui_state.dragging_y = True
         elif turn_rect.collidepoint(mx, my):
-            turn_val = {1: -1, -1: 0, 0: 1}[turn_val]
+            ui_state.turn_val = {1: -1, -1: 0, 0: 1}[ui_state.turn_val]
 
     elif event.type == pygame.MOUSEBUTTONUP:
-        dragging_angle = False
-        dragging_speed = False
-        dragging_y = False
+        ui_state.dragging_angle = False
+        ui_state.dragging_speed = False
+        ui_state.dragging_y = False
 
-    elif event.type == pygame.MOUSEMOTION and (dragging_angle or dragging_speed or dragging_y):
+    elif event.type == pygame.MOUSEMOTION and (ui_state.dragging_angle or ui_state.dragging_speed or ui_state.dragging_y):
         mx, my = event.pos
-        _, (ax, ay, aw), (sx, sy, sw_), (yx, yy, yw), _ = draw_panel(screen, angle_val, speed_val, y_val, turn_val, score)
-        if dragging_angle:
+        _, (ax, ay, aw), (sx, sy, sw_), (yx, yy, yw), _ = draw_panel(screen, ui_state.angle_val, ui_state.speed_val, ui_state.y_val, ui_state.turn_val, score)
+        if ui_state.dragging_angle:
             t = max(0.0, min(1.0, (mx - ax) / aw))
-            angle_val = denormalize(t, min_release_angle, max_release_angle)
-        if dragging_speed:
+            ui_state.angle_val = denormalize(t, min_release_angle, max_release_angle)
+        if ui_state.dragging_speed:
             t = max(0.0, min(1.0, (mx - sx) / sw_))
-            speed_val = denormalize(t, min_release_speed, max_release_speed)
-        if dragging_y:
+            ui_state.speed_val = denormalize(t, min_release_speed, max_release_speed)
+        if ui_state.dragging_y:
             t = max(0.0, min(1.0, (mx - yx) / yw))
-            y_val = denormalize(t, min_release_y, max_release_y)
+            ui_state.y_val = denormalize(t, min_release_y, max_release_y)
 
-    return angle_val, speed_val, y_val, turn_val, dragging_angle, dragging_speed, dragging_y
+    return ui_state
