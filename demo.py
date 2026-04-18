@@ -1,5 +1,6 @@
 import pygame
 import time
+import numpy as np
 
 from physics import run_sim
 from scoring import get_score
@@ -23,6 +24,11 @@ if __name__ == "__main__":
     # UI state
     ui_state = UIState()
     sim_index = 0
+
+    # Lag tracking
+    last_print_time = time.time()
+    total_lag = 0.0
+    frame_count = 0
 
     while True:
         start_time = time.time()
@@ -51,10 +57,19 @@ if __name__ == "__main__":
         end_time = time.time()
         actual_time_ms = (end_time - start_time) * 1000
         speedup = 10
-        intended_frame_time = int(actual_timesteps[sim_index] * 1000) // speedup
+        intended_frame_time = int(actual_timesteps[sim_index].item() * 1000) // speedup
         if actual_time_ms > intended_frame_time:
             lag = actual_time_ms - intended_frame_time
-            print(f"Lag: {lag:.2f} ms")
+            total_lag += lag
+            frame_count += 1
+        current_time = time.time()
+        if current_time - last_print_time >= 1.0:
+            if frame_count > 0:
+                avg_lag = total_lag / frame_count
+                print(f"Average lag: {avg_lag:.2f} ms over {frame_count} frames")
+            last_print_time = current_time
+            total_lag = 0.0
+            frame_count = 0
         wait_time = max(0, intended_frame_time - actual_time_ms)
         pygame.time.wait(int(wait_time))
 
