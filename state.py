@@ -25,6 +25,15 @@ class SheetStates:
 
 
 @dataclass
+class Throw:
+    angle_deg: float
+    speed: float
+    turn: int
+    y_val: float
+    team: int
+
+
+@dataclass
 class VelocityHistories:
     v: np.array  # (num_sims, num_stones, num_timesteps)
     theta: np.array  # (num_sims, num_stones, num_timesteps)
