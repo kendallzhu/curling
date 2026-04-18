@@ -1,4 +1,5 @@
 import pygame
+import time
 
 from physics import run_sim
 from scoring import get_score
@@ -24,6 +25,7 @@ if __name__ == "__main__":
     sim_index = 0
 
     while True:
+        start_time = time.time()
         next_team_to_play = current_sheet_states.team_with_fewer_stones()
         score = get_score(current_sheet_states)[0]
 
@@ -46,7 +48,14 @@ if __name__ == "__main__":
         actual_timesteps, current_sheet_states = run_sim(
             sheet_states=current_sheet_states, max_frame_time=timestep
         )
+        end_time = time.time()
+        actual_time_ms = (end_time - start_time) * 1000
         speedup = 10
-        pygame.time.wait(int(actual_timesteps[sim_index] * 1000) // speedup)
+        intended_frame_time = int(actual_timesteps[sim_index] * 1000) // speedup
+        if actual_time_ms > intended_frame_time:
+            lag = actual_time_ms - intended_frame_time
+            print(f"Lag: {lag:.2f} ms")
+        wait_time = max(0, intended_frame_time - actual_time_ms)
+        pygame.time.wait(int(wait_time))
 
     pygame.quit()
