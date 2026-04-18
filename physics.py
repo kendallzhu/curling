@@ -260,7 +260,7 @@ def run_sim(
     v[sims_with_collisions, idx2] = collision_results["v2"]
     theta[sims_with_collisions, idx2] = collision_results["theta2"]
 
-    return time_to_next_event, separate_overlapping_stones(
+    return time_to_next_event.flatten(), separate_overlapping_stones(
         SheetStates(
             team=team,
             x=x,
