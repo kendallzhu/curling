@@ -11,7 +11,7 @@ from constants import (
     STONE_RADIUS_M,
     ROTATION_RATE,
 )
-from state import Throw, empty_board
+from state import Throw, empty_board, StoneState, SheetState
 
 PANEL_H = 80  # pixels of control panel below the sheet
 SLIDER_BAR_HEIGHT = 10
@@ -58,7 +58,7 @@ class UIState:
         )
 
 
-def render_sheet(surface: pygame.Surface, state) -> None:
+def render_sheet(surface: pygame.Surface, state: SheetState) -> None:
     sw, sh = surface.get_size()
     half_h = sh // 2
     scale = min(sw / (SHEET_W_M / 2), half_h / SHEET_H_M)
@@ -114,14 +114,8 @@ def render_sheet(surface: pygame.Surface, state) -> None:
 
         # Stones
         r = max(2, int(STONE_RADIUS_M * scale))
-        xs, ys, dirs, teams = (
-            state.x[0],
-            state.y[0],
-            state.rotation_directions[0],
-            state.team[0],
-        )
-
-        for x, y, d, team in zip(xs, ys, dirs, teams):
+        for stone in state.stones:
+            x, y, d, team = stone.x, stone.y, stone.rotation_direction, stone.team
             assert team == 0 or team == 1
             color = RED_TEAM_COLOR if team == 0 else YELLOW_TEAM_COLOR
             if x_offset_m <= x <= x_offset_m + half_w:

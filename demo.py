@@ -39,7 +39,7 @@ if __name__ == "__main__":
                 preset_states=(demo_collisions_sheet_states, guard_sheet_states),
             )
 
-        render_sheet(screen, current_sheet_states)
+        render_sheet(screen, current_sheet_states.get_sheet())
         render_ui(screen, ui_state, score, next_team_to_play)
         pygame.display.flip()
         actual_timesteps, current_sheet_states = run_sim(
