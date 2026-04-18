@@ -15,6 +15,28 @@ from user_interface import (
 )
 
 
+class LagTracker:
+    def __init__(self):
+        self.last_print_time = time.time()
+        self.total_lag = 0.0
+        self.frame_count = 0
+
+    def add_lag(self, lag_ms: float) -> None:
+        self.total_lag += lag_ms
+        self.frame_count += 1
+
+    def maybe_print(self) -> None:
+        current_time = time.time()
+        if current_time - self.last_print_time < 2.0:
+            return
+        if self.frame_count > 0:
+            avg_lag = self.total_lag / self.frame_count
+            print(f"Average lag: {avg_lag:.2f} ms over {self.frame_count} frames")
+        self.last_print_time = current_time
+        self.total_lag = 0.0
+        self.frame_count = 0
+
+
 if __name__ == "__main__":
     pygame.init()
     screen = pygame.display.set_mode((1800, 900 + PANEL_H), pygame.RESIZABLE)
@@ -25,10 +47,7 @@ if __name__ == "__main__":
     ui_state = UIState()
     sim_index = 0
 
-    # Lag tracking
-    last_print_time = time.time()
-    total_lag = 0.0
-    frame_count = 0
+    lag_tracker = LagTracker()
 
     while True:
         start_time = time.time()
@@ -59,17 +78,8 @@ if __name__ == "__main__":
         speedup = 10
         intended_frame_time = int(actual_timesteps[sim_index].item() * 1000) // speedup
         if actual_time_ms > intended_frame_time:
-            lag = actual_time_ms - intended_frame_time
-            total_lag += lag
-            frame_count += 1
-        current_time = time.time()
-        if current_time - last_print_time >= 1.0:
-            if frame_count > 0:
-                avg_lag = total_lag / frame_count
-                print(f"Average lag: {avg_lag:.2f} ms over {frame_count} frames")
-            last_print_time = current_time
-            total_lag = 0.0
-            frame_count = 0
+            lag_tracker.add_lag(actual_time_ms - intended_frame_time)
+        lag_tracker.maybe_print()
         wait_time = max(0, intended_frame_time - actual_time_ms)
         pygame.time.wait(int(wait_time))
 
