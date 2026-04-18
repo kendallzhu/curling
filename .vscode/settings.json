@@ -1,0 +1,8 @@
+{
+    "chat.tools.terminal.autoApprove": {
+        "/^cd /home/kzhu/curling && python3 -m py_compile curling\\.py user_interface\\.py$/": {
+            "approve": true,
+            "matchCommandLine": true
+        }
+    }
+}
