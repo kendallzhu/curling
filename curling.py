@@ -10,6 +10,7 @@ from user_interface import (
     draw_panel,
     handle_mouse_input,
     PANEL_H,
+    UIState,
 )
 
 
@@ -67,13 +68,7 @@ if __name__ == "__main__":
     timestep = 0.1
 
     # UI state
-    y_val = 2.5
-    angle_val = 0.0  # degrees
-    speed_val = 2.13  # m/s, 1.8 to 4.0
-    turn_val = 0  # 1, -1, or 0
-    dragging_angle = False
-    dragging_speed = False
-    dragging_y = False
+    ui_state = UIState()
 
     while True:
         next_team_to_play = current_sheet_states.team_with_fewer_stones()
@@ -83,11 +78,11 @@ if __name__ == "__main__":
             if event.type == pygame.QUIT:
                 pygame.quit()
                 exit()
-            angle_val, speed_val, y_val, turn_val, dragging_angle, dragging_speed, dragging_y = handle_mouse_input(event, screen, angle_val, speed_val, y_val, turn_val, score, current_sheet_states, dragging_angle, dragging_speed, dragging_y)
+            ui_state = handle_mouse_input(event, screen, ui_state, score, current_sheet_states)
 
         render_sheet(screen, current_sheet_states)
-        render_add_stone_preview(screen, angle_val, speed_val, turn_val, y_val, next_team_to_play)
-        draw_panel(screen, angle_val, speed_val, y_val, turn_val, score)
+        render_add_stone_preview(screen, ui_state.angle_val, ui_state.speed_val, ui_state.turn_val, ui_state.y_val, next_team_to_play)
+        draw_panel(screen, ui_state.angle_val, ui_state.speed_val, ui_state.y_val, ui_state.turn_val, score)
         pygame.display.flip()
         actual_timesteps, current_sheet_states = run_sim(
             sheet_states=current_sheet_states, max_frame_time=timestep
