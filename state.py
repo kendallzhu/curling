@@ -4,6 +4,19 @@ from constants import starting_release_point
 
 
 @dataclass
+class StoneState:
+    x: float
+    y: float
+    team: int
+    rotation_direction: int
+
+
+@dataclass
+class SheetState:
+    stones: list[StoneState]
+
+
+@dataclass
 class Velocities:
     v: np.array  # (num_sims, num_stones)
     theta: np.array  # (num_sims, num_stones)
@@ -22,6 +35,17 @@ class SheetStates:
 
     def team_with_fewer_stones(self):
         return 0 if self.num_stones(0) < self.num_stones(1) else 1
+
+    def get_sheet(self, sim_index=0) -> SheetState:
+        stones = []
+        for i in range(len(self.x[sim_index])):
+            stones.append(StoneState(
+                x=self.x[sim_index][i],
+                y=self.y[sim_index][i],
+                team=self.team[sim_index][i],
+                rotation_direction=self.rotation_directions[sim_index][i]
+            ))
+        return SheetState(stones=stones)
 
 
 @dataclass
