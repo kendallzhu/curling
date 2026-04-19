@@ -16,15 +16,7 @@ r = STONE_INNER_RING_RADIUS_M
 r_p = (R * R / 2 + r * r) ** 0.5
 
 
-def get_collision_times(*, x1, y1, v1, theta1, x2, y2, v2, theta2, R):
-    xvel_diff = v1 * np.cos(theta1) - v2 * np.cos(theta2)
-    yvel_diff = v1 * np.sin(theta1) - v2 * np.sin(theta2)
-    xpos_diff = x1 - x2
-    ypos_diff = y1 - y2
-    a = xvel_diff**2 + yvel_diff**2
-    b = 2 * (xpos_diff * xvel_diff + ypos_diff * yvel_diff)
-    c = xpos_diff**2 + ypos_diff**2 - 4 * R**2
-
+def smaller_positive_real_quadratic_solution_or_inf(*, a, b, c):
     d = b**2 - 4 * a * c
     sol_exists = (d >= 0) & (a != 0)
     x = np.sqrt(np.fmax(d, 0))
@@ -36,6 +28,27 @@ def get_collision_times(*, x1, y1, v1, theta1, x2, y2, v2, theta2, R):
             (-b - x) / np.where(a != 0, 2 * a, 1),
             np.where(-b + x >= 0, (-b + x) / np.where(a != 0, 2 * a, 1), np.inf),
         ),
+    )
+
+
+def get_collision_times(*, x1, y1, v1, theta1, x2, y2, v2, theta2, R):
+    xvel_diff = v1 * np.cos(theta1) - v2 * np.cos(theta2)
+    yvel_diff = v1 * np.sin(theta1) - v2 * np.sin(theta2)
+    xpos_diff = x1 - x2
+    ypos_diff = y1 - y2
+    a = xvel_diff**2 + yvel_diff**2
+    b = 2 * (xpos_diff * xvel_diff + ypos_diff * yvel_diff)
+    c = xpos_diff**2 + ypos_diff**2 - 4 * R**2
+    return smaller_positive_real_quadratic_solution_or_inf(a=a, b=b, c=c)
+
+
+def get_lower_bound_collision_times(*, x1, y1, v1, x2, y2, v2, mu, g, R):
+    initial_distance = np.sqrt((x1 - x2) ** 2 + (y1 - y2) ** 2)
+    max_closing_speed = v1 + v2
+    deceleration = (np.where((v1 > 0), 1, 0) + np.where(v2 > 0, 1, 0)) * mu * g
+    # print(initial_distance, max_closing_speed, deceleration)
+    return smaller_positive_real_quadratic_solution_or_inf(
+        a=deceleration / 2, b=-max_closing_speed, c=initial_distance - 2 * R
     )
 
 
@@ -100,18 +113,25 @@ def separate_overlapping_stones(sheet_states: SheetStates) -> SheetStates:
 
 def run_to_next_collision_or_stop(
     sheet_states: SheetStates,
+    max_frame_time: float,
 ) -> tuple[np.array, SheetStates]:
+    sheet_states = separate_overlapping_stones(sheet_states)
+    num_sims_total = sheet_states.velocities.v.shape[0]
+    if sheet_states.team.shape[1] == 0:
+        return np.zeros((num_sims_total, 1)), sheet_states
+
     sim_done_mask = np.max(sheet_states.velocities.v, axis=1) > 0
     v = sheet_states.velocities.v[sim_done_mask, :]
     theta = sheet_states.velocities.theta[sim_done_mask, :]
     team = sheet_states.team[sim_done_mask, :]
     x = sheet_states.x[sim_done_mask, :]
     y = sheet_states.y[sim_done_mask, :]
-    c = sheet_states.rotation_directions[sim_done_mask, :] / r_p * frac_pivot_time
+    rotation_directions = sheet_states.rotation_directions[sim_done_mask, :]
+    c = np.where(
+        rotation_directions == 0, 1, rotation_directions / r_p * frac_pivot_time
+    )
 
     num_sims, num_stones = v.shape
-    if team.shape[1] == 0:
-        return np.zeros((num_sims, 1)), sheet_states
 
     time_to_stop = v / (mu * g)
     next_stop_time = np.min(np.where(v > 0, time_to_stop, np.inf), axis=1)
@@ -121,7 +141,7 @@ def run_to_next_collision_or_stop(
     for i in range(num_stones):
         for j in range(i):
             # this .99 stops it from getting stuck
-            time_to_collision = (
+            time_to_collision_linear = (
                 get_collision_times(
                     x1=x[:, j],
                     y1=y[:, j],
@@ -135,6 +155,23 @@ def run_to_next_collision_or_stop(
                 )
                 * 0.99
             )
+            time_to_collision_lbound = (
+                get_lower_bound_collision_times(
+                    x1=x[:, j],
+                    y1=y[:, j],
+                    v1=v[:, j],
+                    x2=x[:, i],
+                    y2=y[:, i],
+                    v2=v[:, i],
+                    mu=mu,
+                    g=g,
+                    R=R,
+                )
+                * 0.99
+            )
+            time_to_collision = np.fmin(
+                time_to_collision_linear, np.fmax(time_to_collision_lbound, 0.1)
+            )
             first_collision_index = np.where(
                 time_to_collision < next_collision_time, j, first_collision_index
             )
@@ -142,23 +179,44 @@ def run_to_next_collision_or_stop(
                 time_to_collision < next_collision_time, i, second_collision_index
             )
             next_collision_time = np.fmin(next_collision_time, time_to_collision)
-    next_event_is_collision = next_collision_time <= next_stop_time
-    time_to_next_event = np.fmin(next_collision_time, next_stop_time).reshape(
-        (num_sims, 1)
+            # print(i, j, next_collision_time)
+    next_event_is_collision = next_collision_time <= np.fmin(
+        next_stop_time, max_frame_time
     )
+    time_to_next_event = np.fmin(
+        next_collision_time, np.fmin(next_stop_time, max_frame_time)
+    ).reshape((num_sims, 1))
 
     # some sims might have stopped moving already
     time_to_next_event = np.where(
         np.isfinite(time_to_next_event), time_to_next_event, 0
     )
-    theta_new = theta + np.where(
-        v > 0, c * v * time_to_next_event - c * mu * g / 2 * time_to_next_event**2, 0
+    distance_traveled = np.where(
+        v == 0, 0, v * time_to_next_event - mu * g / 2 * time_to_next_event**2
     )
-    x += (np.sin(theta_new) - np.sin(theta)) / c
-    y += (np.cos(theta) - np.cos(theta_new)) / c
+    theta_new = theta + np.where(rotation_directions == 0, 0, c * distance_traveled)
+    x += np.where(
+        rotation_directions == 0,
+        np.cos(theta) * distance_traveled,
+        (np.sin(theta_new) - np.sin(theta)) / c,
+    )
+    y += np.where(
+        rotation_directions == 0,
+        np.sin(theta) * distance_traveled,
+        (np.cos(theta) - np.cos(theta_new)) / c,
+    )
     theta = theta_new
     v = np.fmax(v - mu * g * time_to_next_event, 0)
-    sims_with_collisions = np.arange(num_sims, dtype=int)[next_event_is_collision]
+    all_sims = np.arange(num_sims, dtype=int)
+    next_event_is_actual_collision = next_event_is_collision * (
+        (x[all_sims, first_collision_index] - x[all_sims, second_collision_index]) ** 2
+        + (y[all_sims, first_collision_index] - y[all_sims, second_collision_index])
+        ** 2
+        < 1.01 * 4 * R**2
+    )
+    sims_with_collisions = np.arange(num_sims, dtype=int)[
+        next_event_is_actual_collision
+    ]
     idx1 = first_collision_index[sims_with_collisions]
     idx2 = second_collision_index[sims_with_collisions]
     collision_results = apply_collision(
@@ -181,7 +239,9 @@ def run_to_next_collision_or_stop(
     sheet_states.velocities.v[sim_done_mask, :] = v
     sheet_states.velocities.theta[sim_done_mask, :] = theta
 
-    return time_to_next_event, sheet_states
+    all_times = np.ones((num_sims_total, 1)) * max_frame_time
+    all_times[sim_done_mask, :] = time_to_next_event
+    return all_times, sheet_states
 
 
 def run_sim(
@@ -285,10 +345,12 @@ def run_until_stopping(
     return sheet_states
 
 
-def run_until_stopping_fast(*, sheet_states):
+def run_until_stopping_fast(*, sheet_states, max_frame_time: float):
     sheet_states = separate_overlapping_stones(sheet_states)
     while np.max(sheet_states.velocities.v) > 0:
-        _, sheet_states = run_to_next_collision_or_stop(sheet_states=sheet_states)
+        _, sheet_states = run_to_next_collision_or_stop(
+            sheet_states=sheet_states, max_frame_time=max_frame_time
+        )
     return sheet_states
 
 

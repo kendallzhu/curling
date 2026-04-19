@@ -1,7 +1,7 @@
 import numpy as np
 import pygame
 
-from physics import run_sim
+from physics import run_sim, run_to_next_collision_or_stop
 from scoring import get_score
 from state import SheetStates, Velocities, empty_board, Throw
 from user_interface import (
@@ -81,13 +81,16 @@ if __name__ == "__main__":
                 event, screen, ui_state, score, current_sheet_states
             )
 
-        render_sheet(screen, current_sheet_states.get_sheet())
+        render_sheet(screen, current_sheet_states.get_sheet(0))
         render_ui(screen, ui_state, score, next_team_to_play)
         pygame.display.flip()
-        actual_timesteps, current_sheet_states = run_sim(
-            sheet_states=current_sheet_states, max_frame_time=timestep
+        print(current_sheet_states)
+        actual_timesteps, current_sheet_states = run_to_next_collision_or_stop(
+            sheet_states=current_sheet_states, max_frame_time=np.inf
         )
-        speedup = 10
+        print(actual_timesteps)
+        actual_timesteps = np.where(actual_timesteps == np.inf, 0.1, actual_timesteps)
+        speedup = 5
         pygame.time.wait(int(actual_timesteps[0][0] * 1000) // speedup)
 
     pygame.quit()
