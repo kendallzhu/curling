@@ -1,3 +1,4 @@
 __pycache__/
 .py[cod]
 debugging.ipynb
+.ipynb_checkpoints/
