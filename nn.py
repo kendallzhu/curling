@@ -1,6 +1,10 @@
 from dataclasses import dataclass
 import numpy as np
 from abc import ABC, abstractmethod
+import logging
+
+logging.basicConfig(level=logging.debug, format="%(message)s")
+logger = logging.getLogger(__name__)
 
 class Layer(ABC):
     @abstractmethod
@@ -60,6 +64,19 @@ class NN:
     def update(self, output_gradient: np.array, learning_rate: float, regularization: float):
         for layer in reversed(self.layers):
             output_gradient = layer.update_and_return_input_gradient(output_gradient, learning_rate, regularization)
+            logger.debug(f"new output gradient: {output_gradient}")
+
+    def debug_print(self):
+        for i, layer in enumerate(self.layers):
+            if isinstance(layer, Linear):
+                n_out, n_in = layer.weights.shape
+                print(f"Layer {i}: Linear ({n_in} -> {n_out})")
+                print(f"  weights shape: {layer.weights.shape}")
+                print(f"  weights:\n{np.array2string(layer.weights, precision=4, suppress_small=True)}")
+                print(f"  weight stats: min={layer.weights.min():.4f}, max={layer.weights.max():.4f}, mean={layer.weights.mean():.4f}")
+            else:
+                print(f"Layer {i}: {layer.__class__.__name__}")
+            print()
         
 def normalize(X):
     return (X - np.mean(X, axis=0)) / np.std(X, axis=0)
