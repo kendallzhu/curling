@@ -15,6 +15,10 @@
         "/^cd /home/kzhu/curling && python3 demo\\.py$/": {
             "approve": true,
             "matchCommandLine": true
+        },
+        "/^cd /home/kzhu/curling && /home/kzhu/curling/venv/bin/pytest -q tests/test_nn\\.py$/": {
+            "approve": true,
+            "matchCommandLine": true
         }
     }
 }
