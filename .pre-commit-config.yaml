@@ -1,0 +1,21 @@
+exclude: '^venv/'
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0
+    hooks:
+      - id: check-yaml
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+
+  - repo: local
+    hooks:
+      - id: pytest
+        name: pytest
+        entry: pytest
+        language: python
+        additional_dependencies:
+          - pytest
+          - numpy
+        pass_filenames: false
+        always_run: true
