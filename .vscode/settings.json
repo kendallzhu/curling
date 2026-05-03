@@ -19,6 +19,18 @@
         "/^cd /home/kzhu/curling && /home/kzhu/curling/venv/bin/pytest -q tests/test_nn\\.py$/": {
             "approve": true,
             "matchCommandLine": true
+        },
+        "/^cd /home/kzhu/curling && python -m pytest tests/test_nn\\.py -q$/": {
+            "approve": true,
+            "matchCommandLine": true
+        },
+        "/^cd /home/kzhu/curling && python3 -m pytest tests/test_nn\\.py -q$/": {
+            "approve": true,
+            "matchCommandLine": true
+        },
+        "/^cd /home/kzhu/curling && \\./venv/bin/python -m pytest tests/test_nn\\.py -q$/": {
+            "approve": true,
+            "matchCommandLine": true
         }
     }
 }

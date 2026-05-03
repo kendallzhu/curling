@@ -7,6 +7,13 @@ logging.basicConfig(level=logging.DEBUG, format="%(message)s")
 logger = logging.getLogger(__name__)
 
 
+@dataclass(frozen=True)
+class TrainingBatch:
+    input_features: np.ndarray
+    answers: np.ndarray
+
+
+
 class Layer(ABC):
     @abstractmethod
     def run(self, inputs: np.array):
@@ -136,12 +143,13 @@ class NN:
 
     def train(
         self,
-        input_features: np.array,  # (# examples, # columns),
-        answers: np.array,  # (# examples)
+        batch: TrainingBatch,
         loss_function: object,
         learning_rate: float,
         regularization: float,
     ):
+        input_features = batch.input_features
+        answers = batch.answers
         weight_gradients_by_input = []
         bias_gradients_by_input = []
         losses = []
