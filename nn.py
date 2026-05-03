@@ -53,7 +53,7 @@ class Linear(Layer):
         regularization: float,
     ):
         self.weights -= learning_rate * weight_gradient + regularization * self.weights
-        self.bias -= bias_gradient
+        self.bias -= learning_rate * bias_gradient
 
 
 class Max0(Layer):

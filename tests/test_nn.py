@@ -84,9 +84,9 @@ def test_train_backpropagates_through_two_linear_layers_and_activation():
 
     expected_average_loss = 0.5877451310814296
     expected_weights_layer0 = np.array([[1.00680203, -1.0], [0.50680203, 0.46342994]])
-    expected_bias_layer0 = np.array([0.01360406, -0.05953607])
+    expected_bias_layer0 = np.array([0.00680203, -0.02976803])
     expected_weights_layer2 = np.array([[1.00680203, 0.98511598]])
-    expected_bias_layer2 = np.array([-0.05953607])
+    expected_bias_layer2 = np.array([-0.02976803])
 
     assert_allclose(average_loss, expected_average_loss)
     assert_allclose(model.layers[0].weights, expected_weights_layer0)
