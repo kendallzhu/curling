@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from dataclasses import dataclass
 import numpy as np
 from abc import ABC, abstractmethod
@@ -13,6 +15,26 @@ class TrainingBatch:
     answers: np.ndarray
 
 
+@dataclass(frozen=True)
+class LinearGradients:
+    weights: np.ndarray
+    bias: np.ndarray
+
+    def __add__(self, other: "LinearGradients") -> "LinearGradients":
+        return LinearGradients(weights=self.weights + other.weights, bias=self.bias + other.bias)
+
+    @classmethod
+    def average(cls, gradients: list[LinearGradients]) -> LinearGradients:
+        if not gradients:
+            raise ValueError("Cannot average empty gradient list")
+        total_gradients = gradients[0]
+        for grad in gradients[1:]:
+            total_gradients += grad
+        return LinearGradients(
+            weights=total_gradients.weights / len(gradients),
+            bias=total_gradients.bias / len(gradients),
+        )
+
 
 class Layer(ABC):
     @abstractmethod
@@ -20,7 +42,7 @@ class Layer(ABC):
         pass
 
     @abstractmethod
-    def get_gradients(self, output_gradient: np.array):
+    def get_gradients(self, output_gradient: np.array) -> tuple[np.ndarray, LinearGradients | None]:
         pass
 
 
@@ -36,24 +58,21 @@ class Linear(Layer):
         self.previous_inputs = inputs
         return self.weights @ inputs + self.bias
 
-    def get_gradients(self, output_gradient: np.array):
+    def get_gradients(self, output_gradient: np.array) -> tuple[np.ndarray, LinearGradients]:
         self.output_gradient = output_gradient
         input_gradient = self.weights.T @ output_gradient
         n_out, n_in = self.weights.shape
-        weight_gradient = output_gradient.reshape(
-            (n_out, 1)
-        ) @ self.previous_inputs.reshape((1, n_in))
-        return input_gradient, weight_gradient, output_gradient
+        weight_gradient = output_gradient.reshape((n_out, 1)) @ self.previous_inputs.reshape((1, n_in))
+        return input_gradient, LinearGradients(weights=weight_gradient, bias=output_gradient)
 
     def update_weights(
         self,
-        weight_gradient: np.array,
-        bias_gradient: np.array,
+        gradients: LinearGradients,
         learning_rate: float,
         regularization: float,
     ):
-        self.weights -= learning_rate * weight_gradient + regularization * self.weights
-        self.bias -= learning_rate * bias_gradient
+        self.weights -= learning_rate * gradients.weights + regularization * self.weights
+        self.bias -= learning_rate * gradients.bias
 
 
 class Max0(Layer):
@@ -62,9 +81,9 @@ class Max0(Layer):
         self.weights = np.array([])
         return np.fmax(inputs, 0)
 
-    def get_gradients(self, output_gradient: np.array):
+    def get_gradients(self, output_gradient: np.array) -> tuple[np.ndarray, None]:
         self.output_gradient = output_gradient
-        return np.where(self.previous_inputs > 0, 1, 0) * output_gradient, None, None
+        return np.where(self.previous_inputs > 0, 1, 0) * output_gradient, None
 
 
 class MapTo01(Layer):
@@ -73,12 +92,11 @@ class MapTo01(Layer):
         self.weights = np.array([])
         return np.exp(inputs) / (1 + np.exp(inputs))
 
-    def get_gradients(self, output_gradient: np.array):
+    def get_gradients(self, output_gradient: np.array) -> tuple[np.ndarray, None]:
         self.output_gradient = output_gradient
         return (
             (np.exp(self.previous_inputs) / (1 + np.exp(self.previous_inputs)) ** 2)
             * output_gradient,
-            None,
             None,
         )
 
@@ -93,15 +111,13 @@ class NN:
         prediction = self.run(inputs)
         initial_output_gradient = loss_function.output_gradient(prediction, actual)
         input_gradients_by_layer = [None for i in self.layers]
-        weights_gradients_by_layer = [None for i in self.layers]
+        gradients_by_layer = [None for i in self.layers]
         output_gradient = initial_output_gradient
         for layer_idx, layer in reversed(list(enumerate(self.layers))):
-            input_gradient, weights_gradient, bias_gradient = layer.get_gradients(
-                output_gradient
-            )
+            input_gradient, gradients = layer.get_gradients(output_gradient)
             output_gradient = input_gradient
             input_gradients_by_layer[layer_idx] = input_gradient
-            weights_gradients_by_layer[layer_idx] = weights_gradient
+            gradients_by_layer[layer_idx] = gradients
 
         return {
             "inputs": inputs,
@@ -109,7 +125,7 @@ class NN:
             "actual": actual,
             "initial_output_gradient": initial_output_gradient,
             "input_gradients_by_layer": input_gradients_by_layer,
-            "weights_gradients_by_layer": weights_gradients_by_layer,
+            "gradients_by_layer": gradients_by_layer,
         }
 
     def run(self, inputs: np.array):
@@ -118,17 +134,13 @@ class NN:
             values = layer.run(values)
         return values
 
-    def get_gradients(self, output_gradient: np.array) -> list[np.array]:
-        weights_gradients_by_layer = []
-        bias_gradients_by_layer = []
+    def get_gradients(self, output_gradient: np.array) -> list[LinearGradients | None]:
+        gradients_by_layer = []
         for layer in reversed(self.layers):
-            input_gradient, weights_gradient, bias_gradient = layer.get_gradients(
-                output_gradient
-            )
+            input_gradient, gradients = layer.get_gradients(output_gradient)
             output_gradient = input_gradient
-            weights_gradients_by_layer.append(weights_gradient)
-            bias_gradients_by_layer.append(bias_gradient)
-        return weights_gradients_by_layer[::-1], bias_gradients_by_layer[::-1]
+            gradients_by_layer.append(gradients)
+        return gradients_by_layer[::-1]
 
     def get_average_loss(
         self, input_features: np.array, answers: np.array, loss_function: object
@@ -150,8 +162,7 @@ class NN:
     ):
         input_features = batch.input_features
         answers = batch.answers
-        weight_gradients_by_input = []
-        bias_gradients_by_input = []
+        gradients_by_input = []
         losses = []
         for k in range(input_features.shape[0]):
             inputs = input_features[k, :]
@@ -159,41 +170,21 @@ class NN:
             prediction = self.run(inputs)
             output_gradient = loss_function.output_gradient(prediction, actual)
             losses.append(loss_function.get_loss(prediction, actual))
-            weight_gradients, bias_gradients = self.get_gradients(output_gradient)
-            weight_gradients_by_input.append(weight_gradients)
-            bias_gradients_by_input.append(bias_gradients)
+            gradients = self.get_gradients(output_gradient)
+            gradients_by_input.append(gradients)
 
-        weight_gradients_by_layer = [[] for _ in self.layers]
-        bias_gradients_by_layer = [[] for _ in self.layers]
+        gradients_by_layer = [[] for _ in self.layers]
 
-        for this_input_gradients in weight_gradients_by_input:
-            for layer_idx, input_gradient_for_layer in enumerate(this_input_gradients):
-                weight_gradients_by_layer[layer_idx].append(input_gradient_for_layer)
-        for this_input_gradients in bias_gradients_by_input:
-            for layer_idx, input_gradient_for_layer in enumerate(this_input_gradients):
-                bias_gradients_by_layer[layer_idx].append(input_gradient_for_layer)
+        for this_input_gradients in gradients_by_input:
+            for layer_idx, layer_grad in enumerate(this_input_gradients):
+                gradients_by_layer[layer_idx].append(layer_grad)
 
-        # print(gradients_by_input)
-        for (
-            layer,
-            weight_layer_gradients_by_input,
-            bias_layer_gradients_by_input,
-        ) in zip(self.layers, weight_gradients_by_layer, bias_gradients_by_layer):
+        for layer, layer_gradients in zip(self.layers, gradients_by_layer):
             if isinstance(layer, Linear):
-                total_weight_layer_gradient = np.zeros(
-                    weight_layer_gradients_by_input[0].shape
-                )
-                for layer_gradient in weight_layer_gradients_by_input:
-                    #           print(layer_gradient)
-                    total_weight_layer_gradient += layer_gradient
-                total_bias_layer_gradient = np.zeros(
-                    bias_layer_gradients_by_input[0].shape
-                )
-                for layer_gradient in bias_layer_gradients_by_input:
-                    total_bias_layer_gradient += layer_gradient
+                assert layer_gradients, "Expected gradients for linear layer"
+                average_gradients = LinearGradients.average(layer_gradients)
                 layer.update_weights(
-                    total_weight_layer_gradient / len(answers),
-                    total_bias_layer_gradient / len(answers),
+                    average_gradients,
                     learning_rate,
                     regularization,
                 )
