@@ -12,10 +12,7 @@ repos:
     hooks:
       - id: pytest
         name: pytest
-        entry: pytest
-        language: python
-        additional_dependencies:
-          - pytest
-          - numpy
+        entry: /home/kzhu/curling/venv/bin/pytest
+        language: system
         pass_filenames: false
         always_run: true

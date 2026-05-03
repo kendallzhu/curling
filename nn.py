@@ -5,14 +5,10 @@ import numpy as np
 from abc import ABC, abstractmethod
 import logging
 
+from dataset import TrainingBatch
+
 logging.basicConfig(level=logging.DEBUG, format="%(message)s")
 logger = logging.getLogger(__name__)
-
-
-@dataclass(frozen=True)
-class TrainingBatch:
-    input_features: np.ndarray
-    answers: np.ndarray
 
 
 @dataclass(frozen=True)
@@ -223,10 +219,6 @@ class NN:
             else:
                 print(f"Layer {i}: {layer.__class__.__name__}")
             print()
-
-
-def normalize(X):
-    return (X - np.mean(X, axis=0)) / np.std(X, axis=0)
 
 
 class SquaredErrorLoss:
