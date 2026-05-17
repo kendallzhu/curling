@@ -2,6 +2,8 @@ import pygame
 import time
 import numpy as np
 import constants
+import bot
+import copy
 
 from physics import run_sim, run_to_next_collision_or_stop
 from scoring import get_score
@@ -21,10 +23,12 @@ class LagTracker:
         self.last_print_time = time.time()
         self.total_lag = 0.0
         self.frame_count = 0
+        self.total_intended_frame_time = 0.0
 
-    def add_lag(self, lag_ms: float) -> None:
+    def add_lag(self, *, lag_ms: float, intended_frame_time_ms: int) -> None:
         self.total_lag += lag_ms
         self.frame_count += 1
+        self.total_intended_frame_time += intended_frame_time_ms
 
     def maybe_print(self) -> None:
         current_time = time.time()
@@ -32,10 +36,12 @@ class LagTracker:
             return
         if self.frame_count > 0:
             avg_lag = self.total_lag / self.frame_count
-            print(f"Average lag: {avg_lag:.2f} ms over {self.frame_count} frames")
+            avg_intended_frame_time = self.total_intended_frame_time / self.frame_count
+            print(f"Average lag: {avg_lag:.2f} ms over {self.frame_count} frames (average intended frame time: {avg_intended_frame_time:.2f} ms)")
         self.last_print_time = current_time
         self.total_lag = 0.0
         self.frame_count = 0
+        self.total_intended_frame_time = 0.0
 
 
 if __name__ == "__main__":
@@ -51,6 +57,7 @@ if __name__ == "__main__":
     ui_state = UIState()
 
     lag_tracker = LagTracker()
+    has_state_changed = True
 
     while True:
         start_time = time.time()
@@ -75,17 +82,25 @@ if __name__ == "__main__":
 
         render_sheet(screen, current_sheet_states.get_sheet(constants.ui_sim_index))
         render_ui(screen, ui_state, score, next_team_to_play)
+        if has_state_changed and not(current_sheet_states.is_any_stone_moving()):
+            bot_throw = bot.get_throw(current_sheet_states, next_team_to_play)
+            print(bot_throw)
+
         pygame.display.flip()
-        actual_timesteps, current_sheet_states = run_to_next_collision_or_stop(
-            sheet_states=current_sheet_states, max_frame_time=0.03
+
+        actual_timesteps, next_sheet_states = run_to_next_collision_or_stop(
+            sheet_states=copy.deepcopy(current_sheet_states), max_frame_time=0.03
         )
+        has_state_changed = not(next_sheet_states == current_sheet_states)
+        current_sheet_states = next_sheet_states
+
         actual_timesteps = np.where(actual_timesteps == np.inf, 0.1, actual_timesteps)
         end_time = time.time()
         actual_time_ms = (end_time - start_time) * 1000
         speedup = 10
         intended_frame_time = int(actual_timesteps[constants.ui_sim_index].item() * 1000) // speedup
         if actual_time_ms > intended_frame_time:
-            lag_tracker.add_lag(actual_time_ms - intended_frame_time)
+            lag_tracker.add_lag(lag_ms=actual_time_ms - intended_frame_time, intended_frame_time_ms=intended_frame_time)
         lag_tracker.maybe_print()
         wait_time = max(0, intended_frame_time - actual_time_ms)
         pygame.time.wait(int(wait_time))

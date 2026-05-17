@@ -48,6 +48,21 @@ class SheetStates:
             ))
         return SheetState(stones=stones)
 
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, SheetStates):
+            return NotImplemented
+        return (
+            np.array_equal(self.x, other.x)
+            and np.array_equal(self.y, other.y)
+            and np.array_equal(self.team, other.team)
+            and np.array_equal(self.rotation_directions, other.rotation_directions)
+            and np.array_equal(self.velocities.v, other.velocities.v)
+            and np.array_equal(self.velocities.theta, other.velocities.theta)
+        )
+
+    def is_any_stone_moving(self) -> bool:
+        return bool(np.any(self.velocities.v > 0))
+
 
 @dataclass
 class Throw:
