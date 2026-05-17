@@ -6,12 +6,13 @@ from dataclasses import dataclass
 from constants import (
     starting_release_point,
     center_of_target_house,
+    ui_sim_index,
     SHEET_W_M,
     SHEET_H_M,
     STONE_RADIUS_M,
     ROTATION_RATE,
 )
-from state import Throw, empty_board, StoneState, SheetState
+from state import Throw, StoneState, SheetState, empty_board, add_new_stone_from_throw
 
 PANEL_H = 80  # pixels of control panel below the sheet
 SLIDER_BAR_HEIGHT = 10
@@ -322,17 +323,6 @@ def render_ui(surface, ui_state: UIState, score, next_team: int):
         score,
     )
 
-
-def add_stone(state, throw: Throw):
-    angle_rad = math.radians(throw.angle_deg) + np.random.normal(0, 0.001)
-    state.team = np.append(state.team, [[throw.team]], axis=1)
-    state.x = np.append(state.x, [[starting_release_point]], axis=1)
-    state.y = np.append(state.y, [[throw.y_val]], axis=1)
-    speed = throw.speed + np.random.normal(0, 0.005)
-    state.velocities.v = np.append(state.velocities.v, [[speed]], axis=1)
-    state.velocities.theta = np.append(state.velocities.theta, [[angle_rad]], axis=1)
-    state.rotation_directions = np.append(state.rotation_directions, [[throw.turn]], axis=1)
-
 def handle_mouse_input(event, screen, ui_state, score, current_sheet_states, preset_states=()):
     next_sheet_states = current_sheet_states
     if event.type == pygame.MOUSEBUTTONDOWN:
@@ -363,7 +353,7 @@ def handle_mouse_input(event, screen, ui_state, score, current_sheet_states, pre
                 y_val=ui_state.y_val,
                 team=next_team_to_play,
             )
-            add_stone(current_sheet_states, throw)
+            next_sheet_states = add_new_stone_from_throw(next_sheet_states, throw)
         elif empty_rect.collidepoint(mx, my):
             # Clear sheet
             next_sheet_states = empty_board(current_sheet_states.x.shape[0])

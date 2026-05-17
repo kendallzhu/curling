@@ -1,6 +1,7 @@
 import pygame
 import time
 import numpy as np
+import constants
 
 from physics import run_sim, run_to_next_collision_or_stop
 from scoring import get_score
@@ -48,7 +49,6 @@ if __name__ == "__main__":
 
     # UI state
     ui_state = UIState()
-    sim_index = 0
 
     lag_tracker = LagTracker()
 
@@ -73,7 +73,7 @@ if __name__ == "__main__":
                 ),
             )
 
-        render_sheet(screen, current_sheet_states.get_sheet(sim_index))
+        render_sheet(screen, current_sheet_states.get_sheet(constants.ui_sim_index))
         render_ui(screen, ui_state, score, next_team_to_play)
         pygame.display.flip()
         actual_timesteps, current_sheet_states = run_to_next_collision_or_stop(
@@ -83,7 +83,7 @@ if __name__ == "__main__":
         end_time = time.time()
         actual_time_ms = (end_time - start_time) * 1000
         speedup = 10
-        intended_frame_time = int(actual_timesteps[sim_index].item() * 1000) // speedup
+        intended_frame_time = int(actual_timesteps[constants.ui_sim_index].item() * 1000) // speedup
         if actual_time_ms > intended_frame_time:
             lag_tracker.add_lag(actual_time_ms - intended_frame_time)
         lag_tracker.maybe_print()
