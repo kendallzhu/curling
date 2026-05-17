@@ -1,4 +1,5 @@
 import numpy as np
+import math
 from dataclasses import dataclass
 from constants import starting_release_point
 
@@ -119,4 +120,16 @@ def add_new_stone(
             ),
         ),
         team=np.concatenate([old_stones.team, team.reshape((num_sims, 1))], axis=1),
+    )
+
+def add_new_stone_from_throw(state: SheetStates, throw: Throw) -> SheetStates:
+    num_sims = state.x.shape[0]
+    angle_rad = math.radians(throw.angle_deg)
+    return add_new_stone(
+        old_stones=state,
+        rotation_directions=np.full(num_sims, throw.turn),
+        v_0=np.full(num_sims, throw.speed),
+        theta_0=np.full(num_sims, angle_rad),
+        y_0=np.full(num_sims, throw.y_val),
+        team=np.full(num_sims, throw.team),
     )
