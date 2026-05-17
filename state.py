@@ -97,8 +97,19 @@ def empty_board(num_sims: int) -> SheetStates:
         team=np.zeros((num_sims, 0)),
     )
 
+def tile_sheet_states(state: SheetStates, num_copies: int) -> SheetStates:
+    return SheetStates(
+        x=np.tile(state.x, (num_copies, 1)),
+        y=np.tile(state.y, (num_copies, 1)),
+        team=np.tile(state.team, (num_copies, 1)),
+        rotation_directions=np.tile(state.rotation_directions, (num_copies, 1)),
+        velocities=Velocities(
+            v=np.tile(state.velocities.v, (num_copies, 1)),
+            theta=np.tile(state.velocities.theta, (num_copies, 1)),
+        ),
+    )
 
-def add_new_stone(
+def add_new_stone_raw(
     *,
     old_stones: SheetStates,
     rotation_directions: np.ndarray,
@@ -137,10 +148,10 @@ def add_new_stone(
         team=np.concatenate([old_stones.team, team.reshape((num_sims, 1))], axis=1),
     )
 
-def add_new_stone_from_throw(state: SheetStates, throw: Throw) -> SheetStates:
+def add_new_stone(state: SheetStates, throw: Throw) -> SheetStates:
     num_sims = state.x.shape[0]
     angle_rad = math.radians(throw.angle_deg)
-    return add_new_stone(
+    return add_new_stone_raw(
         old_stones=state,
         rotation_directions=np.full(num_sims, throw.turn),
         v_0=np.full(num_sims, throw.speed),
@@ -149,7 +160,7 @@ def add_new_stone_from_throw(state: SheetStates, throw: Throw) -> SheetStates:
         team=np.full(num_sims, throw.team),
     )
 
-def add_stones_from_throws(state: SheetStates, throws: list[Throw]) -> SheetStates:
+def add_new_stones(state: SheetStates, throws: list[Throw]) -> SheetStates:
     assert len(throws) == state.x.shape[0], "must have one throw per sim"
     num_sims = state.x.shape[0]
     new_x = np.concatenate([state.x, np.array([starting_release_point] * num_sims).reshape(num_sims, 1)], axis=1)
@@ -164,4 +175,13 @@ def add_stones_from_throws(state: SheetStates, throws: list[Throw]) -> SheetStat
         team=new_team,
         rotation_directions=new_rotation,
         velocities=Velocities(v=new_v, theta=new_theta),
+    )
+
+def add_noise_to_throw(throw: Throw) -> Throw:
+    return Throw(
+        angle_deg=throw.angle_deg + np.random.normal(0, 0.005),
+        speed=throw.speed + np.random.normal(0, 0.005),
+        turn=throw.turn,
+        y_val=throw.y_val + np.random.normal(0, 0.005),
+        team=throw.team,
     )
