@@ -39,6 +39,14 @@
         "/^cd /home/kzhu/curling && \\./venv/bin/python -m py_compile nn\\.py training_data\\.py && \\./venv/bin/python -m pytest tests/test_nn\\.py -q$/": {
             "approve": true,
             "matchCommandLine": true
+        },
+        "/^cd /home/kzhu/curling && pytest -q tests/test_presets\\.py$/": {
+            "approve": true,
+            "matchCommandLine": true
+        },
+        "/^cd /home/kzhu/curling && \\./venv/bin/python -m pytest -q tests/test_presets\\.py$/": {
+            "approve": true,
+            "matchCommandLine": true
         }
     }
 }

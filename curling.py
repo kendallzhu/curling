@@ -4,13 +4,7 @@ import pygame
 from physics import run_sim, run_to_next_collision_or_stop
 from scoring import get_score
 from state import SheetStates, Velocities, empty_board, Throw
-from user_interface import (
-    render_sheet,
-    render_ui,
-    handle_mouse_input,
-    PANEL_H,
-    UIState,
-)
+import user_interface
 
 
 if __name__ == "__main__":
@@ -62,12 +56,12 @@ if __name__ == "__main__":
     )
 
     pygame.init()
-    screen = pygame.display.set_mode((1800, 900 + PANEL_H), pygame.RESIZABLE)
+    screen = pygame.display.set_mode((1800, 900 + user_interface.PANEL_H), pygame.RESIZABLE)
     current_sheet_states = guard_sheet_states  # empty_board(1)
     timestep = 0.1
 
     # UI state
-    ui_state = UIState()
+    ui_state = user_interface.UIState()
 
     while True:
         next_team_to_play = current_sheet_states.team_with_fewer_stones()
@@ -77,12 +71,12 @@ if __name__ == "__main__":
             if event.type == pygame.QUIT:
                 pygame.quit()
                 exit()
-            ui_state, current_sheet_states = handle_mouse_input(
+            ui_state, current_sheet_states = user_interface.handle_mouse_input(
                 event, screen, ui_state, score, current_sheet_states
             )
 
-        render_sheet(screen, current_sheet_states.get_sheet(0))
-        render_ui(screen, ui_state, score, next_team_to_play)
+        user_interface.render_sheet(screen, current_sheet_states.get_sheet(0))
+        user_interface.render_ui(screen, ui_state, score, next_team_to_play)
         pygame.display.flip()
         print(current_sheet_states)
         actual_timesteps, current_sheet_states = run_to_next_collision_or_stop(

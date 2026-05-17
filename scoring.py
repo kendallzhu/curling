@@ -3,7 +3,7 @@ from constants import center_of_target_house, house_outer_circle_radius, STONE_R
 from state import SheetStates
 
 
-def get_score(sheet_states: SheetStates) -> np.array:  # (num_sims, 2)
+def get_score(sheet_states: SheetStates) -> np.ndarray:  # (num_sims, 2)
     num_sims = sheet_states.x.shape[0]
     distance_from_center = np.sqrt(
         (sheet_states.x - center_of_target_house) ** 2 + (sheet_states.y - 2.5) ** 2

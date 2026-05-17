@@ -11,6 +11,7 @@ frame_time = 0.1
 
 SHEET_W_M = 45.0
 SHEET_H_M = 5.0
+center_line_y = SHEET_H_M / 2.0
 STONE_RADIUS_M = 0.145
 STONE_INNER_RING_RADIUS_M = 0.0625
 ROTATION_RATE = (4 * 2 * math.pi) / 25.0  # 4 full rotations over 25m

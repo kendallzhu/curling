@@ -4,7 +4,7 @@ import numpy as np
 
 from physics import run_sim, run_to_next_collision_or_stop
 from scoring import get_score
-from presets import demo_collisions_sheet_states, guard_sheet_states
+from presets import demo_collisions_sheet_states, guard_sheet_states, random_sheet_states
 from state import empty_board
 from user_interface import (
     render_sheet,
@@ -64,7 +64,10 @@ if __name__ == "__main__":
                 ui_state,
                 score,
                 current_sheet_states,
-                preset_states=(demo_collisions_sheet_states, guard_sheet_states),
+                preset_states=(
+                    demo_collisions_sheet_states,
+                    lambda: random_sheet_states(team1=4, team2=4),
+                ),
             )
 
         render_sheet(screen, current_sheet_states.get_sheet(sim_index))

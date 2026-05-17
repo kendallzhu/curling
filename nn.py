@@ -4,6 +4,7 @@ from dataclasses import dataclass
 import numpy as np
 from abc import ABC, abstractmethod
 import logging
+from typing import Protocol
 
 from dataset import TrainingBatch
 
@@ -33,28 +34,31 @@ class LinearGradients:
 
 
 class Layer(ABC):
+    weights: np.ndarray
+    bias: np.ndarray
+
     @abstractmethod
-    def run(self, inputs: np.array):
+    def run(self, inputs: np.ndarray) -> np.ndarray:
         pass
 
     @abstractmethod
-    def get_gradients(self, output_gradient: np.array) -> tuple[np.ndarray, LinearGradients | None]:
+    def get_gradients(self, output_gradient: np.ndarray) -> tuple[np.ndarray, LinearGradients | None]:
         pass
 
 
 class Linear(Layer):
-    def __init__(self, weights: np.array):
+    def __init__(self, weights: np.ndarray):
         self.weights = weights
         n_out, n_in = self.weights.shape
         self.previous_inputs = np.zeros(n_in)
         self.output_gradient = np.zeros(n_out)
         self.bias = np.zeros(n_out)
 
-    def run(self, inputs: np.array):
+    def run(self, inputs: np.ndarray):
         self.previous_inputs = inputs
         return self.weights @ inputs + self.bias
 
-    def get_gradients(self, output_gradient: np.array) -> tuple[np.ndarray, LinearGradients]:
+    def get_gradients(self, output_gradient: np.ndarray) -> tuple[np.ndarray, LinearGradients]:
         self.output_gradient = output_gradient
         input_gradient = self.weights.T @ output_gradient
         n_out, n_in = self.weights.shape
@@ -72,23 +76,23 @@ class Linear(Layer):
 
 
 class Max0(Layer):
-    def run(self, inputs: np.array):
+    def run(self, inputs: np.ndarray):
         self.previous_inputs = inputs
         self.weights = np.array([])
         return np.fmax(inputs, 0)
 
-    def get_gradients(self, output_gradient: np.array) -> tuple[np.ndarray, None]:
+    def get_gradients(self, output_gradient: np.ndarray) -> tuple[np.ndarray, None]:
         self.output_gradient = output_gradient
         return np.where(self.previous_inputs > 0, 1, 0) * output_gradient, None
 
 
 class MapTo01(Layer):
-    def run(self, inputs: np.array):
+    def run(self, inputs: np.ndarray):
         self.previous_inputs = inputs
         self.weights = np.array([])
         return np.exp(inputs) / (1 + np.exp(inputs))
 
-    def get_gradients(self, output_gradient: np.array) -> tuple[np.ndarray, None]:
+    def get_gradients(self, output_gradient: np.ndarray) -> tuple[np.ndarray, None]:
         self.output_gradient = output_gradient
         return (
             (np.exp(self.previous_inputs) / (1 + np.exp(self.previous_inputs)) ** 2)
@@ -102,12 +106,12 @@ class NN:
         self.layers = layers
 
     def debug_gradients(
-        self, inputs: np.array, actual: np.array, loss_function: object
+        self, inputs: np.ndarray, actual: np.ndarray, loss_function: LossFunction
     ):
         prediction = self.run(inputs)
         initial_output_gradient = loss_function.output_gradient(prediction, actual)
-        input_gradients_by_layer = [None for i in self.layers]
-        gradients_by_layer = [None for i in self.layers]
+        input_gradients_by_layer: list[np.ndarray | None] = [None for i in self.layers]
+        gradients_by_layer: list[LinearGradients | None] = [None for i in self.layers]
         output_gradient = initial_output_gradient
         for layer_idx, layer in reversed(list(enumerate(self.layers))):
             input_gradient, gradients = layer.get_gradients(output_gradient)
@@ -124,13 +128,13 @@ class NN:
             "gradients_by_layer": gradients_by_layer,
         }
 
-    def run(self, inputs: np.array):
+    def run(self, inputs: np.ndarray):
         values = inputs
         for layer in self.layers:
             values = layer.run(values)
         return values
 
-    def get_gradients(self, output_gradient: np.array) -> list[LinearGradients | None]:
+    def get_gradients(self, output_gradient: np.ndarray) -> list[LinearGradients | None]:
         gradients_by_layer = []
         for layer in reversed(self.layers):
             input_gradient, gradients = layer.get_gradients(output_gradient)
@@ -139,7 +143,7 @@ class NN:
         return gradients_by_layer[::-1]
 
     def get_average_loss(
-        self, input_features: np.array, answers: np.array, loss_function: object
+        self, input_features: np.ndarray, answers: np.ndarray, loss_function: LossFunction
     ):
         losses = []
         for k in range(input_features.shape[0]):
@@ -152,7 +156,7 @@ class NN:
     def train(
         self,
         batch: TrainingBatch,
-        loss_function: object,
+        loss_function: LossFunction,
         learning_rate: float,
         regularization: float,
     ):
@@ -186,16 +190,6 @@ class NN:
                 )
         return np.average(np.array(losses))
 
-    def update(
-        self, output_gradient: np.array, learning_rate: float, regularization: float
-    ):
-        for layer in reversed(self.layers):
-            output_gradient = layer.update_and_return_input_gradient(
-                output_gradient, learning_rate, regularization
-            )
-
-    #            logger.debug(f"new output gradient: {output_gradient}")
-
     def debug_print(self):
         print("calling debug_print")
         for i, layer in enumerate(self.layers):
@@ -220,6 +214,11 @@ class NN:
                 print(f"Layer {i}: {layer.__class__.__name__}")
             print()
 
+from typing import Protocol
+
+class LossFunction(Protocol):
+    def get_loss(self, prediction: np.ndarray, actual: np.ndarray) -> np.ndarray: ...
+    def output_gradient(self, prediction: np.ndarray, actual: np.ndarray) -> np.ndarray: ...
 
 class SquaredErrorLoss:
     def get_loss(self, prediction, actual):

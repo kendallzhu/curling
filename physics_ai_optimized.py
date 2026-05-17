@@ -195,7 +195,7 @@ def separate_overlapping_stones(sheet_states: SheetStates) -> SheetStates:
 def run_to_next_collision_or_stop(
     sheet_states: SheetStates,
     max_frame_time: float,
-) -> tuple[np.array, SheetStates]:
+) -> tuple[np.ndarray, SheetStates]:
     separate_overlapping_stones(sheet_states)
     num_sims_total = sheet_states.velocities.v.shape[0]
     if sheet_states.team.shape[1] == 0:
