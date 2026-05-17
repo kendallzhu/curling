@@ -84,7 +84,7 @@ if __name__ == "__main__":
         render_sheet(screen, current_sheet_states.get_sheet(constants.ui_sim_index))
         render_ui(screen, ui_state, score, next_team_to_play)
         if has_state_changed and not(current_sheet_states.is_any_stone_moving()):
-            bot_throw = bot.get_throw(current_sheet_states, next_team_to_play)
+            bot_throw = bot.get_throw_grid_search(current_sheet_states, next_team_to_play)
             print(bot_throw)
             print("Simulated score after throw:", bot.simulate_score_after_throw(current_sheet_states, bot_throw))
 

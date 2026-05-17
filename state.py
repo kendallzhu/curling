@@ -148,3 +148,20 @@ def add_new_stone_from_throw(state: SheetStates, throw: Throw) -> SheetStates:
         y_0=np.full(num_sims, throw.y_val),
         team=np.full(num_sims, throw.team),
     )
+
+def add_stones_from_throws(state: SheetStates, throws: list[Throw]) -> SheetStates:
+    assert len(throws) == state.x.shape[0], "must have one throw per sim"
+    num_sims = state.x.shape[0]
+    new_x = np.concatenate([state.x, np.array([starting_release_point] * num_sims).reshape(num_sims, 1)], axis=1)
+    new_y = np.concatenate([state.y, np.array([t.y_val for t in throws]).reshape(num_sims, 1)], axis=1)
+    new_team = np.concatenate([state.team, np.array([t.team for t in throws]).reshape(num_sims, 1)], axis=1)
+    new_v = np.concatenate([state.velocities.v, np.array([t.speed for t in throws]).reshape(num_sims, 1)], axis=1)
+    new_theta = np.concatenate([state.velocities.theta, np.array([math.radians(t.angle_deg) for t in throws]).reshape(num_sims, 1)], axis=1)
+    new_rotation = np.concatenate([state.rotation_directions, np.array([t.turn for t in throws]).reshape(num_sims, 1)], axis=1)
+    return SheetStates(
+        x=new_x,
+        y=new_y,
+        team=new_team,
+        rotation_directions=new_rotation,
+        velocities=Velocities(v=new_v, theta=new_theta),
+    )
