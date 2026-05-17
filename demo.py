@@ -39,8 +39,11 @@ class LagTracker:
 
 if __name__ == "__main__":
     pygame.init()
-    screen = pygame.display.set_mode((1800, 900 + PANEL_H), pygame.RESIZABLE)
-    current_sheet_states = guard_sheet_states()  # empty_board(1)
+    monitor_size_multiplier = 2.0
+    window_width = 1800 * monitor_size_multiplier
+    window_height = window_width / 2 + PANEL_H
+    screen = pygame.display.set_mode((window_width, window_height), pygame.RESIZABLE)
+    current_sheet_states = random_sheet_states(team1=4, team2=3) # guard_sheet_states()  # empty_board(1)
     timestep = 0.1
 
     # UI state
@@ -66,7 +69,7 @@ if __name__ == "__main__":
                 current_sheet_states,
                 preset_states=(
                     demo_collisions_sheet_states,
-                    lambda: random_sheet_states(team1=4, team2=4),
+                    lambda: random_sheet_states(team1=4, team2=3),
                 ),
             )
 
