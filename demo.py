@@ -84,10 +84,9 @@ if __name__ == "__main__":
         render_sheet(screen, next_sheet_states.get_sheet(constants.ui_sim_index))
         render_ui(screen, ui_state, score, next_team_to_play)
         if has_state_changed and not(next_sheet_states.is_any_stone_moving()):
-            bot_throw = bot.get_throw_grid_search(next_sheet_states, next_team_to_play)
+            bot_throw, bot_target_score, bot_robust_score = bot.get_throw_grid_search(next_sheet_states, next_team_to_play)
             print("Bot chosen throw:",bot_throw)
-            print("Simulated score after throw:", bot.simulate_score_after_throw(next_sheet_states, bot_throw))
-            print("Simulated average score after throw with noise:", bot.simulate_average_scores_with_noise(next_sheet_states, [bot_throw]))
+            print(f"Bot target score: {bot_target_score}, robust score: {bot_robust_score}")
 
         pygame.display.flip()
 
@@ -105,7 +104,7 @@ if __name__ == "__main__":
         intended_frame_time = int(actual_timesteps[constants.ui_sim_index].item() * 1000) // speedup
         if actual_time_ms > intended_frame_time:
             lag_tracker.add_lag(lag_ms=actual_time_ms - intended_frame_time, intended_frame_time_ms=intended_frame_time)
-        lag_tracker.maybe_print()
+        #lag_tracker.maybe_print()
         wait_time = max(0, intended_frame_time - actual_time_ms)
         pygame.time.wait(int(wait_time))
 
