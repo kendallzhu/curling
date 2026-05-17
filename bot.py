@@ -29,7 +29,7 @@ def get_throw_grid_search(state: SheetStates, team: int) -> Throw:
 
     combinations = list(itertools.product(angle_options, speed_options, turn_options, y_options))
     num_combos = len(combinations)
-    print(f"Evaluating {num_combos} combinations")
+    print(f"Grid search: evaluating {num_combos} throws")
 
     # tile the current state across all combinations
     tiled_state = SheetStates(

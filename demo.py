@@ -51,7 +51,7 @@ if __name__ == "__main__":
     window_width = 1800 * monitor_size_multiplier
     window_height = window_width / 2 + PANEL_H
     screen = pygame.display.set_mode((window_width, window_height), pygame.RESIZABLE)
-    current_sheet_states = random_sheet_states(team1=4, team2=3) # guard_sheet_states()  # empty_board(1)
+    previous_sheet_states = random_sheet_states(team1=4, team2=3) # guard_sheet_states()  # empty_board(1)
     timestep = 0.1
 
     # UI state
@@ -62,40 +62,41 @@ if __name__ == "__main__":
 
     while True:
         start_time = time.time()
-        next_team_to_play = current_sheet_states.team_with_fewer_stones()
-        score = get_score(current_sheet_states)[0]
+        next_team_to_play = previous_sheet_states.team_with_fewer_stones()
+        score = get_score(previous_sheet_states)[0]
 
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 pygame.quit()
                 exit()
-            ui_state, current_sheet_states = handle_mouse_input(
+            ui_state, next_sheet_states = handle_mouse_input(
                 event,
                 screen,
                 ui_state,
                 score,
-                current_sheet_states,
+                previous_sheet_states,
                 preset_states=(
                     demo_collisions_sheet_states,
                     lambda: random_sheet_states(team1=4, team2=3),
                 ),
             )
 
-        render_sheet(screen, current_sheet_states.get_sheet(constants.ui_sim_index))
+        render_sheet(screen, next_sheet_states.get_sheet(constants.ui_sim_index))
         render_ui(screen, ui_state, score, next_team_to_play)
-        if has_state_changed and not(current_sheet_states.is_any_stone_moving()):
-            bot_throw = bot.get_throw_grid_search(current_sheet_states, next_team_to_play)
-            print(bot_throw)
-            print("Simulated score after throw:", bot.simulate_score_after_throw(current_sheet_states, bot_throw))
+        if has_state_changed and not(next_sheet_states.is_any_stone_moving()):
+            bot_throw = bot.get_throw_grid_search(next_sheet_states, next_team_to_play)
+            print("Bot chosen throw:",bot_throw)
+            print("Simulated score after throw:", bot.simulate_score_after_throw(next_sheet_states, bot_throw))
 
         pygame.display.flip()
 
         actual_timesteps, next_sheet_states = run_to_next_collision_or_stop(
-            sheet_states=copy.deepcopy(current_sheet_states), max_frame_time=0.03
+            sheet_states=copy.deepcopy(next_sheet_states), max_frame_time=0.03
         )
-        has_state_changed = not(next_sheet_states == current_sheet_states)
-        current_sheet_states = next_sheet_states
+        has_state_changed = not(previous_sheet_states == next_sheet_states)
+        previous_sheet_states = next_sheet_states
 
+        # Waiting code below
         actual_timesteps = np.where(actual_timesteps == np.inf, 0.1, actual_timesteps)
         end_time = time.time()
         actual_time_ms = (end_time - start_time) * 1000
