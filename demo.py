@@ -87,6 +87,7 @@ if __name__ == "__main__":
             bot_throw = bot.get_throw_grid_search(next_sheet_states, next_team_to_play)
             print("Bot chosen throw:",bot_throw)
             print("Simulated score after throw:", bot.simulate_score_after_throw(next_sheet_states, bot_throw))
+            print("Simulated average score after throw with noise:", bot.simulate_average_scores_with_noise(next_sheet_states, [bot_throw]))
 
         pygame.display.flip()
 

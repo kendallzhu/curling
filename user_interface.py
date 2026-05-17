@@ -12,7 +12,7 @@ from constants import (
     STONE_RADIUS_M,
     ROTATION_RATE,
 )
-from state import Throw, StoneState, SheetState, empty_board, add_new_stone_from_throw
+from state import Throw, StoneState, SheetState, empty_board, add_new_stone, add_noise_to_throw
 
 PANEL_H = 80  # pixels of control panel below the sheet
 SLIDER_BAR_HEIGHT = 10
@@ -353,7 +353,8 @@ def handle_mouse_input(event, screen, ui_state, score, current_sheet_states, pre
                 y_val=ui_state.y_val,
                 team=next_team_to_play,
             )
-            next_sheet_states = add_new_stone_from_throw(next_sheet_states, throw)
+            # throw = add_noise_to_throw(throw)
+            next_sheet_states = add_new_stone(next_sheet_states, throw)
         elif empty_rect.collidepoint(mx, my):
             # Clear sheet
             next_sheet_states = empty_board(current_sheet_states.x.shape[0])
