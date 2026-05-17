@@ -24,6 +24,7 @@ class LagTracker:
         self.total_lag = 0.0
         self.frame_count = 0
         self.total_intended_frame_time = 0.0
+        self.print_interval_seconds = 5.0
 
     def add_lag(self, *, lag_ms: float, intended_frame_time_ms: int) -> None:
         self.total_lag += lag_ms
@@ -32,7 +33,7 @@ class LagTracker:
 
     def maybe_print(self) -> None:
         current_time = time.time()
-        if current_time - self.last_print_time < 2.0:
+        if current_time - self.last_print_time < self.print_interval_seconds:
             return
         if self.frame_count > 0:
             avg_lag = self.total_lag / self.frame_count
@@ -46,7 +47,7 @@ class LagTracker:
 
 if __name__ == "__main__":
     pygame.init()
-    monitor_size_multiplier = 2.0
+    monitor_size_multiplier = 1.8
     window_width = 1800 * monitor_size_multiplier
     window_height = window_width / 2 + PANEL_H
     screen = pygame.display.set_mode((window_width, window_height), pygame.RESIZABLE)
@@ -85,6 +86,7 @@ if __name__ == "__main__":
         if has_state_changed and not(current_sheet_states.is_any_stone_moving()):
             bot_throw = bot.get_throw(current_sheet_states, next_team_to_play)
             print(bot_throw)
+            print("Simulated score after throw:", bot.simulate_score_after_throw(current_sheet_states, bot_throw))
 
         pygame.display.flip()
 

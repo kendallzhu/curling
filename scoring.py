@@ -26,3 +26,7 @@ def get_score(sheet_states: SheetStates) -> np.ndarray:  # (num_sims, 2)
             in_house & (distance_from_center < team_closest_stone_in_house[:, [1 - i]])
         ).sum(axis=1)
     return team_scores
+
+def get_net_score_for_team(sheet_states: SheetStates, team: int)  -> np.ndarray:  # (num_sims, 1)
+    scores = get_score(sheet_states)
+    return scores[:, team] - scores[:, 1 - team]
