@@ -286,7 +286,7 @@ def run_to_next_collision_or_stop(
     return all_times, sheet_states
 
 
-def run_until_stopping_fast(*, sheet_states, max_frame_time: float):
+def run_until_stopping_fast(*, sheet_states, max_frame_time: float = np.inf) -> SheetStates:
     separate_overlapping_stones(sheet_states)
     while np.max(sheet_states.velocities.v) > 0:
         _, sheet_states = run_to_next_collision_or_stop(
