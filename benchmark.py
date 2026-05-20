@@ -1,8 +1,7 @@
 import numpy as np
 import time
-from physics import run_until_stopping, run_until_stopping_fast
-import physics_ai_optimized
-from state import empty_board, add_new_stone
+import physics_numba, physics_numpy
+from state import empty_board, add_new_stone_raw
 
 num_stones = 16
 num_sims = 2_000
@@ -11,7 +10,7 @@ sheet_states = empty_board(num_sims)
 
 t0 = time.time()
 for i in range(num_stones):
-    sheet_states = add_new_stone(
+    sheet_states = add_new_stone_raw(
         old_stones=sheet_states,
         rotation_directions=np.random.choice([1, 1], size=num_sims),
         v_0=np.random.normal(2, 0.1, size=num_sims),
@@ -19,7 +18,7 @@ for i in range(num_stones):
         y_0=np.zeros(shape=(num_sims,)),
         team=np.ones(shape=(num_sims,)) * (i % 2),
     )
-    sheet_states = run_until_stopping_fast(
+    sheet_states = physics_numpy.run_until_stopping(
         sheet_states=sheet_states, max_frame_time=np.inf
     )
 
@@ -27,7 +26,7 @@ sheet_states2 = empty_board(num_sims)
 
 t0 = time.time()
 for i in range(num_stones):
-    sheet_states2 = add_new_stone(
+    sheet_states2 = add_new_stone_raw(
         old_stones=sheet_states2,
         rotation_directions=np.random.choice([1, 1], size=num_sims),
         v_0=np.random.normal(2, 0.1, size=num_sims),
@@ -35,7 +34,7 @@ for i in range(num_stones):
         y_0=np.zeros(shape=(num_sims,)),
         team=np.ones(shape=(num_sims,)) * (i % 2),
     )
-    sheet_states2 = physics_ai_optimized.run_until_stopping_fast(
+    sheet_states2 = physics_numba.run_until_stopping(
         sheet_states=sheet_states2, max_frame_time=np.inf
     )
 
@@ -46,7 +45,7 @@ sheet_states = empty_board(num_sims)
 
 t0 = time.time()
 for i in range(num_stones):
-    sheet_states = add_new_stone(
+    sheet_states = add_new_stone_raw(
         old_stones=sheet_states,
         rotation_directions=np.random.choice([1, 1], size=num_sims),
         v_0=np.random.normal(2, 0.1, size=num_sims),
@@ -54,7 +53,7 @@ for i in range(num_stones):
         y_0=np.zeros(shape=(num_sims,)),
         team=np.ones(shape=(num_sims,)) * (i % 2),
     )
-    sheet_states = run_until_stopping_fast(
+    sheet_states = physics_numpy.run_until_stopping(
         sheet_states=sheet_states, max_frame_time=np.inf
     )
 print(
@@ -66,7 +65,7 @@ sheet_states2 = empty_board(num_sims)
 
 t0 = time.time()
 for i in range(num_stones):
-    sheet_states2 = add_new_stone(
+    sheet_states2 = add_new_stone_raw(
         old_stones=sheet_states2,
         rotation_directions=np.random.choice([1, 1], size=num_sims),
         v_0=np.random.normal(2, 0.1, size=num_sims),
@@ -74,7 +73,7 @@ for i in range(num_stones):
         y_0=np.zeros(shape=(num_sims,)),
         team=np.ones(shape=(num_sims,)) * (i % 2),
     )
-    sheet_states2 = physics_ai_optimized.run_until_stopping_fast(
+    sheet_states2 = physics_numba.run_until_stopping(
         sheet_states=sheet_states2, max_frame_time=np.inf
     )
 print(
