@@ -4,3 +4,6 @@ debugging.ipynb
 .ipynb_checkpoints/
 curling.egg-info/
 venv/
+.venv
+src/
+
