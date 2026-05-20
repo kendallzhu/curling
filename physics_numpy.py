@@ -244,7 +244,7 @@ def run_to_next_collision_or_stop(
     return all_times, sheet_states
 
 
-def run_sim(
+def run_sim_linear(
     *, sheet_states: SheetStates, max_frame_time: float
 ) -> tuple[np.ndarray, SheetStates]:
     v = sheet_states.velocities.v
@@ -334,18 +334,18 @@ def run_sim(
     )
 
 
-def run_until_stopping(
+def run_until_stopping_linear(
     *, sheet_states: SheetStates, max_frame_time: float = np.inf
 ) -> SheetStates:
     sheet_states = separate_overlapping_stones(sheet_states)
     while np.max(sheet_states.velocities.v) > 0:
-        _, sheet_states = run_sim(
+        _, sheet_states = run_sim_linear(
             sheet_states=sheet_states, max_frame_time=max_frame_time
         )
     return sheet_states
 
 
-def run_until_stopping_fast(*, sheet_states, max_frame_time: float = np.inf) -> SheetStates:
+def run_until_stopping(*, sheet_states, max_frame_time: float = np.inf) -> SheetStates:
     sheet_states = separate_overlapping_stones(sheet_states)
     while np.max(sheet_states.velocities.v) > 0:
         _, sheet_states = run_to_next_collision_or_stop(
@@ -354,14 +354,14 @@ def run_until_stopping_fast(*, sheet_states, max_frame_time: float = np.inf) -> 
     return sheet_states
 
 
-def run_until_stopping_with_history(
+def run_until_stopping_with_history_linear(
     *, sheet_states: SheetStates, max_frame_time: float
 ) -> tuple[SheetStates, SheetHistories]:
     frame_count = 0
     historical_states = [copy.deepcopy(sheet_states)]
     historical_times = [np.zeros((sheet_states.x.shape[0], 1), dtype=np.float64)]
     while np.max(sheet_states.velocities.v) > 0:
-        time_elapsed, sheet_states = run_sim(
+        time_elapsed, sheet_states = run_sim_linear(
             sheet_states=sheet_states, max_frame_time=max_frame_time
         )
         historical_states.append(copy.deepcopy(sheet_states))

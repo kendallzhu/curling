@@ -1,9 +1,9 @@
 import numpy as np
 import pygame
 
-from physics import run_sim, run_to_next_collision_or_stop
+from physics import run_to_next_collision_or_stop
 from scoring import get_score
-from state import SheetStates, Velocities, empty_board, Throw
+from state import SheetStates, Velocities
 import user_interface
 
 
@@ -56,7 +56,9 @@ if __name__ == "__main__":
     )
 
     pygame.init()
-    screen = pygame.display.set_mode((1800, 900 + user_interface.PANEL_H), pygame.RESIZABLE)
+    screen = pygame.display.set_mode(
+        (1800, 900 + user_interface.PANEL_H), pygame.RESIZABLE
+    )
     current_sheet_states = guard_sheet_states  # empty_board(1)
     timestep = 0.1
 
