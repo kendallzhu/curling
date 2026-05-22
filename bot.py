@@ -1,4 +1,5 @@
 import numpy as np
+import os
 import math
 
 from state import (
@@ -13,6 +14,8 @@ from state import (
 import scoring
 import physics
 import itertools
+
+sam_mode = os.uname().nodename == "vfpc02"
 
 
 def get_throw(state: SheetStates, team) -> Throw:
@@ -50,10 +53,10 @@ def simulate_average_scores_with_noise(
 
 
 def get_throw_grid_search(state: SheetStates, team: int) -> tuple[Throw, float, float]:
-    angle_options = np.linspace(-4, 4, 30)
-    speed_options = np.linspace(2.0, 2.5, 30)
+    angle_options = np.linspace(-4, 4, 20 if sam_mode else 30)
+    speed_options = np.linspace(2.0, 2.5, 20 if sam_mode else 30)
     turn_options = [-1, 0, 1]
-    y_options = np.linspace(2.25, 2.75, 10)
+    y_options = np.linspace(2.25, 2.75, 6 if sam_mode else 10)
 
     combinations = list(
         itertools.product(angle_options, speed_options, turn_options, y_options)

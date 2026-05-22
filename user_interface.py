@@ -12,7 +12,14 @@ from constants import (
     STONE_RADIUS_M,
     ROTATION_RATE,
 )
-from state import Throw, StoneState, SheetState, empty_board, add_new_stone, add_noise_to_throw
+from state import (
+    Throw,
+    StoneState,
+    SheetState,
+    empty_board,
+    add_new_stone,
+    add_noise_to_throw,
+)
 
 PANEL_H = 80  # pixels of control panel below the sheet
 SLIDER_BAR_HEIGHT = 10
@@ -24,11 +31,14 @@ YELLOW_TEAM_COLOR = (200, 200, 20)
 TURN_LABELS = {1: "Clockwise", -1: "Counter", 0: "No Spin"}
 TURN_COLOURS = {1: (160, 80, 80), -1: (80, 80, 160), 0: (80, 80, 80)}
 
+
 def normalize(value, min, max):
     return (value - min) / (max - min)
 
+
 def denormalize(normalized, min, max):
     return min + normalized * (max - min)
+
 
 min_release_angle = -4
 max_release_angle = 4
@@ -39,6 +49,7 @@ max_release_speed = 4.0
 min_release_y = 2.25
 max_release_y = 2.75
 
+
 @dataclass
 class UIState:
     angle_val: float = 0.0
@@ -48,6 +59,7 @@ class UIState:
     dragging_angle: bool = False
     dragging_speed: bool = False
     dragging_y: bool = False
+    bot_throw: Throw | None = None
 
     def to_next_throw(self, team: int) -> Throw:
         return Throw(
@@ -137,6 +149,7 @@ def render_sheet(surface: pygame.Surface, state: SheetState) -> None:
     draw_half(0.0, 0)
     draw_half(SHEET_W_M / 2, half_h)
 
+
 def render_add_stone_preview(surface, throw: Throw):
     color = RED_TEAM_COLOR if throw.team == 0 else YELLOW_TEAM_COLOR
     sw, sh = surface.get_size()
@@ -192,8 +205,13 @@ def render_add_stone_preview(surface, throw: Throw):
         curl_left_y = curl_back_y + curl_perp_y
         curl_right_x = curl_back_x - curl_perp_x
         curl_right_y = curl_back_y - curl_perp_y
-        pygame.draw.line(surface, color, (curl_end_x, curl_end_y), (curl_left_x, curl_left_y), 2)
-        pygame.draw.line(surface, color, (curl_end_x, curl_end_y), (curl_right_x, curl_right_y), 2)
+        pygame.draw.line(
+            surface, color, (curl_end_x, curl_end_y), (curl_left_x, curl_left_y), 2
+        )
+        pygame.draw.line(
+            surface, color, (curl_end_x, curl_end_y), (curl_right_x, curl_right_y), 2
+        )
+
 
 def get_preset_button_rects():
     x0 = 20
@@ -229,27 +247,48 @@ def render_preset_buttons(surface):
     return empty_rect, preset1_rect, preset2_rect
 
 
-def draw_panel(surface, angle, speed, y_val, turn_val, score):
+def draw_panel(surface, angle, speed, y_val, turn_val, score, bot_throw=None):
     sw, sh = surface.get_size()
     panel_y = sh - PANEL_H
     pygame.draw.rect(surface, (40, 40, 40), (0, panel_y, sw, PANEL_H))
 
     font = pygame.font.SysFont(None, 24)
 
-    # Button
-    btn_rect = pygame.Rect(20, panel_y + 20, 120, 40)
+    # Add Stone button
+    btn_rect = pygame.Rect(20, panel_y + 20, 95, 40)
     pygame.draw.rect(surface, (80, 160, 80), btn_rect, border_radius=6)
     surface.blit(
         font.render("Add Stone", True, (255, 255, 255)),
-        (btn_rect.x + 10, btn_rect.y + 10),
+        (btn_rect.x + 8, btn_rect.y + 10),
+    )
+
+    # Bot throw button
+    bot_btn_rect = pygame.Rect(125, panel_y + 20, 95, 40)
+    btn_color = (160, 120, 80) if bot_throw else (80, 80, 80)
+    pygame.draw.rect(surface, btn_color, bot_btn_rect, border_radius=6)
+    surface.blit(
+        font.render("Bot Throw", True, (255, 255, 255)),
+        (bot_btn_rect.x + 5, bot_btn_rect.y + 10),
+    )
+
+    # Turn toggle
+    turn_x = 230
+    turn_rect = pygame.Rect(turn_x, panel_y + 20, 100, 40)
+    pygame.draw.rect(surface, TURN_COLOURS[turn_val], turn_rect, border_radius=6)
+    surface.blit(
+        font.render(TURN_LABELS[turn_val], True, (255, 255, 255)),
+        (turn_rect.x + 6, turn_rect.y + 10),
     )
 
     # Angle slider
-    angle_x = 200
+    angle_x = 340
     slider_y = panel_y + 40
-    slider_w = 200
+    slider_w = 140
     pygame.draw.rect(
-        surface, (100, 100, 100), (angle_x, slider_y - SLIDER_BAR_OFFSET, slider_w, SLIDER_BAR_HEIGHT), border_radius=4
+        surface,
+        (100, 100, 100),
+        (angle_x, slider_y - SLIDER_BAR_OFFSET, slider_w, SLIDER_BAR_HEIGHT),
+        border_radius=4,
     )
     angle_t = normalize(angle, min_release_angle, max_release_angle)
     pygame.draw.circle(
@@ -261,9 +300,12 @@ def draw_panel(surface, angle, speed, y_val, turn_val, score):
     )
 
     # Speed slider
-    speed_x = 480
+    speed_x = 495
     pygame.draw.rect(
-        surface, (100, 100, 100), (speed_x, slider_y - SLIDER_BAR_OFFSET, slider_w, SLIDER_BAR_HEIGHT), border_radius=4
+        surface,
+        (100, 100, 100),
+        (speed_x, slider_y - SLIDER_BAR_OFFSET, slider_w, SLIDER_BAR_HEIGHT),
+        border_radius=4,
     )
     speed_t = normalize(speed, min_release_speed, max_release_speed)
     pygame.draw.circle(
@@ -275,9 +317,12 @@ def draw_panel(surface, angle, speed, y_val, turn_val, score):
     )
 
     # Y offset slider
-    y_x = 760
+    y_x = 670
     pygame.draw.rect(
-        surface, (100, 100, 100), (y_x, slider_y - SLIDER_BAR_OFFSET, slider_w, SLIDER_BAR_HEIGHT), border_radius=4
+        surface,
+        (100, 100, 100),
+        (y_x, slider_y - SLIDER_BAR_OFFSET, slider_w, SLIDER_BAR_HEIGHT),
+        border_radius=4,
     )
     y_t = normalize(y_val, min_release_y, max_release_y)
     pygame.draw.circle(
@@ -287,15 +332,6 @@ def draw_panel(surface, angle, speed, y_val, turn_val, score):
         font.render(f"Y: {y_val:.2f} m", True, (200, 200, 200)), (y_x, panel_y + 12)
     )
 
-    # Turn toggle
-    turn_x = 990
-    turn_rect = pygame.Rect(turn_x, panel_y + 20, 120, 40)
-    pygame.draw.rect(surface, TURN_COLOURS[turn_val], turn_rect, border_radius=6)
-    surface.blit(
-        font.render(TURN_LABELS[turn_val], True, (255, 255, 255)),
-        (turn_rect.x + 8, turn_rect.y + 10),
-    )
-
     # Score display
     s0, s1 = int(score[0]), int(score[1])
     score_text = font.render(f"Red  {s0}  —  {s1}  Yellow", True, (220, 220, 220))
@@ -303,6 +339,7 @@ def draw_panel(surface, angle, speed, y_val, turn_val, score):
 
     return (
         btn_rect,
+        bot_btn_rect,
         (angle_x, slider_y, slider_w),
         (speed_x, slider_y, slider_w),
         (y_x, slider_y, slider_w),
@@ -321,26 +358,41 @@ def render_ui(surface, ui_state: UIState, score, next_team: int):
         ui_state.y_val,
         ui_state.turn_val,
         score,
+        ui_state.bot_throw,
     )
 
-def handle_mouse_input(event, screen, ui_state, score, current_sheet_states, preset_states=()):
+
+def handle_mouse_input(
+    event, screen, ui_state, score, current_sheet_states, preset_states=()
+):
     next_sheet_states = current_sheet_states
     if event.type == pygame.MOUSEBUTTONDOWN:
         # Handle mouse button down events for UI interaction
         mx, my = event.pos
         empty_rect, preset1_rect, preset2_rect = get_preset_button_rects()
-        btn_rect, (ax, ay, aw), (sx, sy, sw_), (yx, yy, yw), turn_rect = draw_panel(
-            screen,
-            ui_state.angle_val,
-            ui_state.speed_val,
-            ui_state.y_val,
-            ui_state.turn_val,
-            score,
+        btn_rect, bot_btn_rect, (ax, ay, aw), (sx, sy, sw_), (yx, yy, yw), turn_rect = (
+            draw_panel(
+                screen,
+                ui_state.angle_val,
+                ui_state.speed_val,
+                ui_state.y_val,
+                ui_state.turn_val,
+                score,
+                ui_state.bot_throw,
+            )
         )
 
-        angle_knob_x = int(ax + normalize(ui_state.angle_val, min_release_angle, max_release_angle) * aw)
-        speed_knob_x = int(sx + normalize(ui_state.speed_val, min_release_speed, max_release_speed) * sw_)
-        y_knob_x = int(yx + normalize(ui_state.y_val, min_release_y, max_release_y) * yw)
+        angle_knob_x = int(
+            ax
+            + normalize(ui_state.angle_val, min_release_angle, max_release_angle) * aw
+        )
+        speed_knob_x = int(
+            sx
+            + normalize(ui_state.speed_val, min_release_speed, max_release_speed) * sw_
+        )
+        y_knob_x = int(
+            yx + normalize(ui_state.y_val, min_release_y, max_release_y) * yw
+        )
 
         next_team_to_play = current_sheet_states.team_with_fewer_stones()
 
@@ -355,6 +407,13 @@ def handle_mouse_input(event, screen, ui_state, score, current_sheet_states, pre
             )
             # throw = add_noise_to_throw(throw)
             next_sheet_states = add_new_stone(next_sheet_states, throw)
+        elif bot_btn_rect.collidepoint(mx, my) and ui_state.bot_throw:
+            if not current_sheet_states.is_any_stone_moving():
+                next_sheet_states = add_new_stone(next_sheet_states, ui_state.bot_throw)
+                ui_state.angle_val = ui_state.bot_throw.angle_deg
+                ui_state.speed_val = ui_state.bot_throw.speed
+                ui_state.y_val = ui_state.bot_throw.y_val
+                ui_state.turn_val = ui_state.bot_throw.turn
         elif empty_rect.collidepoint(mx, my):
             # Clear sheet
             next_sheet_states = empty_board(current_sheet_states.x.shape[0])
@@ -380,10 +439,16 @@ def handle_mouse_input(event, screen, ui_state, score, current_sheet_states, pre
         if y_rect.collidepoint(mx, my):
             t = max(0.0, min(1.0, (mx - yx) / yw))
             ui_state.y_val = denormalize(t, min_release_y, max_release_y)
-        if abs(mx - angle_knob_x) < KNOB_CLICK_RADIUS and abs(my - ay) < KNOB_CLICK_RADIUS:
+        if (
+            abs(mx - angle_knob_x) < KNOB_CLICK_RADIUS
+            and abs(my - ay) < KNOB_CLICK_RADIUS
+        ):
             # Check for knob dragging initiation
             ui_state.dragging_angle = True
-        if abs(mx - speed_knob_x) < KNOB_CLICK_RADIUS and abs(my - sy) < KNOB_CLICK_RADIUS:
+        if (
+            abs(mx - speed_knob_x) < KNOB_CLICK_RADIUS
+            and abs(my - sy) < KNOB_CLICK_RADIUS
+        ):
             ui_state.dragging_speed = True
         if abs(mx - y_knob_x) < KNOB_CLICK_RADIUS and abs(my - yy) < KNOB_CLICK_RADIUS:
             ui_state.dragging_y = True
@@ -397,10 +462,20 @@ def handle_mouse_input(event, screen, ui_state, score, current_sheet_states, pre
         ui_state.dragging_speed = False
         ui_state.dragging_y = False
 
-    elif event.type == pygame.MOUSEMOTION and (ui_state.dragging_angle or ui_state.dragging_speed or ui_state.dragging_y):
+    elif event.type == pygame.MOUSEMOTION and (
+        ui_state.dragging_angle or ui_state.dragging_speed or ui_state.dragging_y
+    ):
         # Update slider values during drag
         mx, my = event.pos
-        _, (ax, ay, aw), (sx, sy, sw_), (yx, yy, yw), _ = draw_panel(screen, ui_state.angle_val, ui_state.speed_val, ui_state.y_val, ui_state.turn_val, score)
+        _, _, (ax, ay, aw), (sx, sy, sw_), (yx, yy, yw), _ = draw_panel(
+            screen,
+            ui_state.angle_val,
+            ui_state.speed_val,
+            ui_state.y_val,
+            ui_state.turn_val,
+            score,
+            ui_state.bot_throw,
+        )
         if ui_state.dragging_angle:
             t = max(0.0, min(1.0, (mx - ax) / aw))
             ui_state.angle_val = denormalize(t, min_release_angle, max_release_angle)

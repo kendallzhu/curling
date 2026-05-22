@@ -1,0 +1,35 @@
+# Virtual environments
+venv/
+.venv/
+
+# IDE & editor
+.vscode/
+
+# Git
+.git/
+
+# Python cache & build artifacts
+__pycache__/
+.pytest_cache/
+.ipynb_checkpoints/
+
+# Non-Python files
+*.md
+*.txt
+*.rst
+*.json
+*.yaml
+*.yml
+*.toml
+*.cfg
+*.ini
+*.ipynb
+*.pre-commit-config.yaml
+
+# Data & logs
+*.log
+*.csv
+*.tsv
+*.parquet
+*.db
+*.sqlite

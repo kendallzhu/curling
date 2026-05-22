@@ -4,6 +4,7 @@ import numpy as np
 import constants
 import bot
 import copy
+import os
 
 from physics import run_to_next_collision_or_stop
 from scoring import get_score
@@ -12,7 +13,7 @@ from presets import (
     guard_sheet_states,
     random_sheet_states,
 )
-from state import empty_board
+from state import empty_board, remove_stones_off_sheet
 from user_interface import (
     render_sheet,
     render_ui,
@@ -20,6 +21,8 @@ from user_interface import (
     PANEL_H,
     UIState,
 )
+
+sam_mode = os.uname().nodename == "vfpc02"
 
 
 class LagTracker:
@@ -62,15 +65,17 @@ if __name__ == "__main__":
     )  # guard_sheet_states()  # empty_board(1)
     timestep = 0.1
 
-    # UI state
     ui_state = UIState()
+
+    next_team_to_play = 1
+
+    bot_throw = ui_state.bot_throw = None
 
     lag_tracker = LagTracker()
     has_state_changed = True
 
     while True:
         start_time = time.time()
-        next_team_to_play = previous_sheet_states.team_with_fewer_stones()
         score = get_score(previous_sheet_states)[0]
 
         for event in pygame.event.get():
@@ -88,10 +93,21 @@ if __name__ == "__main__":
                     lambda: random_sheet_states(team1=4, team2=3),
                 ),
             )
+            if (
+                next_sheet_states.is_any_stone_moving()
+                and not previous_sheet_states.is_any_stone_moving()
+            ):
+                break
 
         render_sheet(screen, next_sheet_states.get_sheet(constants.ui_sim_index))
         render_ui(screen, ui_state, score, next_team_to_play)
         if has_state_changed and not (next_sheet_states.is_any_stone_moving()):
+            next_team_to_play = (
+                next_team_to_play
+                if previous_sheet_states.num_stones(next_team_to_play)
+                < previous_sheet_states.num_stones(1 - next_team_to_play)
+                else 1 - next_team_to_play
+            )
             bot_throw, bot_target_score, bot_robust_score = bot.get_throw_grid_search(
                 next_sheet_states, next_team_to_play
             )
@@ -99,20 +115,25 @@ if __name__ == "__main__":
             print(
                 f"Bot target score: {bot_target_score}, robust score: {bot_robust_score}"
             )
+            ui_state.bot_throw = bot_throw
 
         pygame.display.flip()
 
+        max_frame_time = 0.15 if sam_mode else 0.03
         actual_timesteps, next_sheet_states = run_to_next_collision_or_stop(
-            sheet_states=copy.deepcopy(next_sheet_states), max_frame_time=0.03
+            sheet_states=copy.deepcopy(next_sheet_states), max_frame_time=max_frame_time
         )
+        next_sheet_states = remove_stones_off_sheet(next_sheet_states)
         has_state_changed = not (previous_sheet_states == next_sheet_states)
         previous_sheet_states = next_sheet_states
 
         # Waiting code below
-        actual_timesteps = np.where(actual_timesteps == np.inf, 0.1, actual_timesteps)
+        actual_timesteps = np.where(
+            actual_timesteps == np.inf, max_frame_time, actual_timesteps
+        )
         end_time = time.time()
         actual_time_ms = (end_time - start_time) * 1000
-        speedup = 10
+        speedup = 5 if sam_mode else 10
         intended_frame_time = (
             int(actual_timesteps[constants.ui_sim_index].item() * 1000) // speedup
         )
