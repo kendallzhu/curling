@@ -14,6 +14,7 @@ __pycache__/
 .ipynb_checkpoints/
 
 # Non-Python files
+!CLAUDE.md
 *.md
 *.txt
 *.rst

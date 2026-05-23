@@ -18,7 +18,9 @@ class LinearGradients:
     bias: np.ndarray
 
     def __add__(self, other: "LinearGradients") -> "LinearGradients":
-        return LinearGradients(weights=self.weights + other.weights, bias=self.bias + other.bias)
+        return LinearGradients(
+            weights=self.weights + other.weights, bias=self.bias + other.bias
+        )
 
     @classmethod
     def average(cls, gradients: list[LinearGradients]) -> LinearGradients:
@@ -42,7 +44,9 @@ class Layer(ABC):
         pass
 
     @abstractmethod
-    def get_gradients(self, output_gradient: np.ndarray) -> tuple[np.ndarray, LinearGradients | None]:
+    def get_gradients(
+        self, output_gradient: np.ndarray
+    ) -> tuple[np.ndarray, LinearGradients | None]:
         pass
 
 
@@ -58,12 +62,18 @@ class Linear(Layer):
         self.previous_inputs = inputs
         return self.weights @ inputs + self.bias
 
-    def get_gradients(self, output_gradient: np.ndarray) -> tuple[np.ndarray, LinearGradients]:
+    def get_gradients(
+        self, output_gradient: np.ndarray
+    ) -> tuple[np.ndarray, LinearGradients]:
         self.output_gradient = output_gradient
         input_gradient = self.weights.T @ output_gradient
         n_out, n_in = self.weights.shape
-        weight_gradient = output_gradient.reshape((n_out, 1)) @ self.previous_inputs.reshape((1, n_in))
-        return input_gradient, LinearGradients(weights=weight_gradient, bias=output_gradient)
+        weight_gradient = output_gradient.reshape(
+            (n_out, 1)
+        ) @ self.previous_inputs.reshape((1, n_in))
+        return input_gradient, LinearGradients(
+            weights=weight_gradient, bias=output_gradient
+        )
 
     def update_weights(
         self,
@@ -71,7 +81,64 @@ class Linear(Layer):
         learning_rate: float,
         regularization: float,
     ):
-        self.weights -= learning_rate * gradients.weights + regularization * self.weights
+        self.weights -= (
+            learning_rate * gradients.weights + regularization * self.weights
+        )
+        self.bias -= learning_rate * gradients.bias
+
+
+class LinearBatched(Layer):
+    def __init__(self, weights: np.ndarray):
+        self.weights = weights
+        n_out, n_in = self.weights.shape
+        self.previous_inputs = np.zeros((1, n_in, 1))
+        self.output_gradient = np.zeros((1, n_out, 1))
+        self.bias = np.zeros((n_out, 1))
+        self.current_batch_size = 1
+
+    # (batch_size, n_in, 1) -> (batch_size, n_out, 1)
+    def run(self, inputs: np.ndarray):
+        (_expected_n_out, expected_n_in) = self.weights.shape
+        if inputs.shape == (expected_n_in,):
+            inputs = inputs[None, :, None]
+        (batch_size, n_in, one) = inputs.shape
+        assert (
+            (n_in, one) == (expected_n_in, 1)
+        ), f"Error: expected inputs with shape (batch_size, {expected_n_in}, 1) but got {inputs.shape}!"
+        self.current_batch_size = batch_size
+        self.previous_inputs = inputs
+        return self.weights @ inputs + self.bias
+
+    # (batch_size, n_out, 1) -> (batch_size, n_in, 1) x LinearGradients((n_out, n_in), (n_out, 1))
+    def get_gradients(
+        self, output_gradient: np.ndarray
+    ) -> tuple[np.ndarray, LinearGradients]:
+        (expected_n_out, _expected_n_in) = self.weights.shape
+        assert (
+            output_gradient.shape == (self.current_batch_size, expected_n_out, 1)
+        ), f"Error: expected output gradient with shape ({self.current_batch_size}, {expected_n_out}, 1) but got {output_gradient.shape}"
+        self.output_gradient = output_gradient
+        input_gradient = self.weights.T @ output_gradient
+        n_out, n_in = self.weights.shape
+        average_weight_gradient = (
+            output_gradient[:, :, 0].T
+            @ self.previous_inputs[:, :, 0]
+            / self.current_batch_size
+        )
+        average_bias_gradient = np.average(output_gradient, axis=0)
+        return input_gradient, LinearGradients(
+            weights=average_weight_gradient, bias=average_bias_gradient
+        )
+
+    def update_weights(
+        self,
+        gradients: LinearGradients,
+        learning_rate: float,
+        regularization: float,
+    ):
+        self.weights -= (
+            learning_rate * gradients.weights + regularization * self.weights
+        )
         self.bias -= learning_rate * gradients.bias
 
 
@@ -134,7 +201,9 @@ class NN:
             values = layer.run(values)
         return values
 
-    def get_gradients(self, output_gradient: np.ndarray) -> list[LinearGradients | None]:
+    def get_gradients(
+        self, output_gradient: np.ndarray
+    ) -> list[LinearGradients | None]:
         gradients_by_layer = []
         for layer in reversed(self.layers):
             input_gradient, gradients = layer.get_gradients(output_gradient)
@@ -143,7 +212,10 @@ class NN:
         return gradients_by_layer[::-1]
 
     def get_average_loss(
-        self, input_features: np.ndarray, answers: np.ndarray, loss_function: LossFunction
+        self,
+        input_features: np.ndarray,
+        answers: np.ndarray,
+        loss_function: LossFunction,
     ):
         losses = []
         for k in range(input_features.shape[0]):
@@ -152,6 +224,19 @@ class NN:
             prediction = self.run(inputs)
             losses.append(loss_function.get_loss(prediction, actual))
         return np.average(np.array(losses))
+
+    def get_average_loss_batched(
+        self,
+        input_features: np.ndarray,
+        answers: np.ndarray,
+        loss_function: LossFunction,
+    ):
+        inputs = input_features[:, :, None]
+        actual = answers[:, None, None]
+
+        prediction = self.run(inputs)
+        loss = loss_function.get_loss(prediction, actual)
+        return np.average(loss)
 
     def train(
         self,
@@ -190,6 +275,31 @@ class NN:
                 )
         return np.average(np.array(losses))
 
+    def train_batched(
+        self,
+        batch: TrainingBatch,
+        loss_function: LossFunction,
+        learning_rate: float,
+        regularization: float,
+    ):
+        inputs = batch.input_features[:, :, None]
+        actual = batch.answers[:, None, None]
+
+        prediction = self.run(inputs)
+        output_gradient = loss_function.output_gradient(prediction, actual)
+        loss = loss_function.get_loss(prediction, actual)
+        average_gradients_by_layer = self.get_gradients(output_gradient)
+
+        for layer, average_gradients in zip(self.layers, average_gradients_by_layer):
+            if isinstance(layer, LinearBatched):
+                assert average_gradients, "Expected gradients for linear layer"
+                layer.update_weights(
+                    average_gradients,
+                    learning_rate,
+                    regularization,
+                )
+        return np.average(loss)
+
     def debug_print(self):
         print("calling debug_print")
         for i, layer in enumerate(self.layers):
@@ -214,11 +324,13 @@ class NN:
                 print(f"Layer {i}: {layer.__class__.__name__}")
             print()
 
-from typing import Protocol
 
 class LossFunction(Protocol):
     def get_loss(self, prediction: np.ndarray, actual: np.ndarray) -> np.ndarray: ...
-    def output_gradient(self, prediction: np.ndarray, actual: np.ndarray) -> np.ndarray: ...
+    def output_gradient(
+        self, prediction: np.ndarray, actual: np.ndarray
+    ) -> np.ndarray: ...
+
 
 class SquaredErrorLoss:
     def get_loss(self, prediction, actual):
