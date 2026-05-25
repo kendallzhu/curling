@@ -37,22 +37,6 @@ class SheetStates:
     velocities: Velocities
     rotation_directions: np.ndarray  # (num_sims, num_stones) 0/-1/1
 
-    def shuffle_stones(self, rng: np.random.Generator) -> "SheetStates":
-        num_sims, num_stones = self.team.shape
-        perms = np.argsort(rng.random((num_sims, num_stones)), axis=1)
-
-        row_idx = np.arange(num_sims)[:, None]
-        return SheetStates(
-            team=self.team[row_idx, perms],
-            x=self.x[row_idx, perms],
-            y=self.y[row_idx, perms],
-            velocities=Velocities(
-                v=self.velocities.v[row_idx, perms],
-                theta=self.velocities.theta[row_idx, perms],
-            ),
-            rotation_directions=self.rotation_directions[row_idx, perms],
-        )
-
     def num_stones(self, of_team):
         return np.sum(self.team[0] == of_team)
 

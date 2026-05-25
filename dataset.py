@@ -75,7 +75,7 @@ class TrainingData:
         rng = np.random.default_rng(seed)
         raw_inputs = np.concatenate(
             [
-                ss.shuffle_stones(rng).to_input_features(throws_remaining_by_team=tr)
+                ss.to_input_features(throws_remaining_by_team=tr)
                 for (ss, tr) in zip(sheet_states, throws_remaining_by_team)
             ],
             axis=0,
