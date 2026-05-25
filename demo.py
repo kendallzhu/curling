@@ -4,7 +4,6 @@ import numpy as np
 import constants
 import bot
 import copy
-import os
 
 from physics import run_to_next_collision_or_stop
 from scoring import get_score
@@ -22,7 +21,6 @@ from user_interface import (
     UIState,
 )
 
-sam_mode = os.uname().nodename == "vfpc02"
 
 
 class LagTracker:
@@ -119,7 +117,7 @@ if __name__ == "__main__":
 
         pygame.display.flip()
 
-        max_frame_time = 0.15 if sam_mode else 0.03
+        max_frame_time = 0.15
         actual_timesteps, next_sheet_states = run_to_next_collision_or_stop(
             sheet_states=copy.deepcopy(next_sheet_states), max_frame_time=max_frame_time
         )
@@ -133,7 +131,7 @@ if __name__ == "__main__":
         )
         end_time = time.time()
         actual_time_ms = (end_time - start_time) * 1000
-        speedup = 5 if sam_mode else 10
+        speedup = 5
         intended_frame_time = (
             int(actual_timesteps[constants.ui_sim_index].item() * 1000) // speedup
         )
