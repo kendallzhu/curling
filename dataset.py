@@ -96,13 +96,8 @@ class TrainingData:
         num_stones_per_side: int = 5,
         throws_remaining_by_team: tuple[int, int] = (0, 0),
     ) -> "TrainingData":
-        states = state.concat(
-            [
-                presets.random_sheet_states(
-                    team1=num_stones_per_side, team2=num_stones_per_side
-                )
-                for _ in range(num_sims)
-            ]
+        states = presets.random_sheet_states(
+            team1=num_stones_per_side, team2=num_stones_per_side, num_sims=num_sims
         )
 
         raw_inputs = states.to_input_features(
@@ -115,8 +110,6 @@ class TrainingData:
                 -num_stones_per_side, num_stones_per_side + 1, dtype=int
             ).reshape((1, 2 * num_stones_per_side + 1))
         ).astype(int)
-
-        answers = np.concatenate([score.reshape((num_sims, 1)), score_matches], axis=1)
 
         normalizer = Normalizer.from_features(raw_inputs)
         input_features = normalizer.normalize(raw_inputs)
