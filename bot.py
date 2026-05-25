@@ -20,6 +20,7 @@ from dataset import Normalizer
 import nn
 import scoring
 import physics
+import curling_nn
 import itertools
 
 
@@ -163,17 +164,13 @@ class ArgmaxRandomThrowPolicy(CurlingPolicy):
         n_throws_per_state: int,
         random_action_prob: float,
         num_stones_per_side: int,
-        neural_network: nn.NN,
+        neural_network: curling_nn.ValueNetwork,
         normalizer: Normalizer,
     ):
         def scoring_function(sheet_states: SheetStates, team: int) -> np.ndarray:
-            total_remaining_throws = 2 * num_stones_per_side - sheet_states.x.shape[1]
-            input_features = sheet_states.to_input_features(
-                (
-                    total_remaining_throws // 2,
-                    total_remaining_throws - total_remaining_throws // 2,
-                )
-            )
+
+
+            input_features = curling_nn.InputFeatures.create_of_sheet_states(sheet_states)
             nn_output = neural_network.run(
                 normalizer.normalize(input_features)[:, :, None]
             )

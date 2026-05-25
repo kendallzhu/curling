@@ -63,62 +63,7 @@ class TrainingData:
             raw_inputs=raw_inputs,
         )
 
-    @classmethod
-    def curling(
-        cls,
-        sheet_states: list[state.SheetStates],
-        throws_remaining_by_team: list[tuple[int, int]],
-        final_scores: list[np.ndarray],
-        seed: int,
-        normalizer: Normalizer | None,
-    ) -> "TrainingData":
-        rng = np.random.default_rng(seed)
-        raw_inputs = np.concatenate(
-            [
-                ss.to_input_features(throws_remaining_by_team=tr)
-                for (ss, tr) in zip(sheet_states, throws_remaining_by_team)
-            ],
-            axis=0,
-        )
-        normalizer = normalizer or Normalizer.from_features(raw_inputs)
-        input_features = normalizer.normalize(raw_inputs)
-        return cls(
-            input_features=input_features,
-            answers=np.concatenate(final_scores).reshape((raw_inputs.shape[0], 1)),
-            normalizer=normalizer,
-            raw_inputs=raw_inputs,
-        )
 
-    @classmethod
-    def curling_random_sheet_states(
-        cls,
-        num_sims: int = 10000,
-        num_stones_per_side: int = 5,
-        throws_remaining_by_team: tuple[int, int] = (0, 0),
-    ) -> "TrainingData":
-        states = presets.random_sheet_states(
-            team1=num_stones_per_side, team2=num_stones_per_side, num_sims=num_sims
-        )
-
-        raw_inputs = states.to_input_features(
-            throws_remaining_by_team=throws_remaining_by_team
-        )
-        score = scoring.get_score(states) @ np.array([1, -1])
-        score_matches = (
-            score.reshape((num_sims, 1))
-            == np.arange(
-                -num_stones_per_side, num_stones_per_side + 1, dtype=int
-            ).reshape((1, 2 * num_stones_per_side + 1))
-        ).astype(int)
-
-        normalizer = Normalizer.from_features(raw_inputs)
-        input_features = normalizer.normalize(raw_inputs)
-        return cls(
-            input_features=input_features,
-            answers=score_matches,
-            normalizer=normalizer,
-            raw_inputs=raw_inputs,
-        )
 
     @staticmethod
     def normalize(X: np.ndarray) -> np.ndarray:
