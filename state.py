@@ -87,21 +87,21 @@ class SheetStates:
     def is_any_stone_moving(self) -> bool:
         return bool(np.any(self.velocities.v > 0))
 
-    def distance_from_center_of_house(self) -> np.array:
+    def distance_from_center_of_house(self) -> np.ndarray:
         return np.sqrt((self.x - center_of_target_house) ** 2 + (self.y - 2.5) ** 2)
 
     def to_input_features(
         self, throws_remaining_by_team: tuple[int, int]
     ) -> np.ndarray:
         num_sims, num_existing_stones = self.x.shape
-        is_thrown = np.concat(
+        is_thrown = np.concatenate(
             [
                 np.where(self.x == 0, 0, 1),
                 np.zeros((num_sims, sum(throws_remaining_by_team))),
             ],
             axis=1,
         )
-        team = np.concat(
+        team = np.concatenate(
             [
                 self.team,
                 np.zeros((num_sims, throws_remaining_by_team[0]), dtype=int),
@@ -109,13 +109,13 @@ class SheetStates:
             ],
             axis=1,
         )
-        x = np.concat(
+        x = np.concatenate(
             [self.x, np.zeros((num_sims, sum(throws_remaining_by_team)))], axis=1
         )
-        y = np.concat(
+        y = np.concatenate(
             [self.y, np.zeros((num_sims, sum(throws_remaining_by_team)))], axis=1
         )
-        distance_from_center = np.concat(
+        distance_from_center = np.concatenate(
             [
                 self.distance_from_center_of_house(),
                 np.ones((num_sims, sum(throws_remaining_by_team)))
@@ -128,21 +128,21 @@ class SheetStates:
             1,
             0,
         )
-        return np.concat(
+        return np.concatenate(
             [is_thrown, team, x, y, distance_from_center, is_in_house], axis=1
         )
 
 
 def concat(states: list[SheetStates]) -> SheetStates:
     return SheetStates(
-        team=np.concat([state.team for state in states], axis=0),
-        x=np.concat([state.x for state in states], axis=0),
-        y=np.concat([state.y for state in states], axis=0),
+        team=np.concatenate([state.team for state in states], axis=0),
+        x=np.concatenate([state.x for state in states], axis=0),
+        y=np.concatenate([state.y for state in states], axis=0),
         velocities=Velocities(
-            v=np.concat([state.velocities.v for state in states], axis=0),
-            theta=np.concat([state.velocities.theta for state in states], axis=0),
+            v=np.concatenate([state.velocities.v for state in states], axis=0),
+            theta=np.concatenate([state.velocities.theta for state in states], axis=0),
         ),
-        rotation_directions=np.concat(
+        rotation_directions=np.concatenate(
             [state.rotation_directions for state in states], axis=0
         ),
     )
@@ -159,11 +159,11 @@ class Throw:
 
 @dataclass
 class Throws:
-    angle_deg: np.array
-    speed: np.array
-    turn: np.array
-    y_val: np.array
-    team: np.array
+    angle_deg: np.ndarray
+    speed: np.ndarray
+    turn: np.ndarray
+    y_val: np.ndarray
+    team: np.ndarray
 
 
 @dataclass

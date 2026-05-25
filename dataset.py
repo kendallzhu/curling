@@ -27,7 +27,7 @@ class Normalizer:
     def normalize(self, X):
         return np.where(
             self.feature_stdevs == 0,
-            np.zeros(X.shape),
+            X,
             (X - self.feature_means)
             / np.where(self.feature_stdevs == 0, 1, self.feature_stdevs),
         )
@@ -54,7 +54,7 @@ class TrainingData:
             np.float64
         )
         raw_inputs = r * np.concatenate([np.cos(theta), np.sin(theta)], axis=1)
-        normalizer = Normalizer(raw_inputs)
+        normalizer = Normalizer.from_features(raw_inputs)
         input_features = normalizer.normalize(raw_inputs)
         return cls(
             input_features=input_features,
@@ -68,12 +68,12 @@ class TrainingData:
         cls,
         sheet_states: list[state.SheetStates],
         throws_remaining_by_team: list[tuple[int, int]],
-        final_scores: list[np.array],
+        final_scores: list[np.ndarray],
         seed: int,
         normalizer: Normalizer | None,
     ) -> "TrainingData":
         rng = np.random.default_rng(seed)
-        raw_inputs = np.concat(
+        raw_inputs = np.concatenate(
             [
                 ss.shuffle_stones(rng).to_input_features(throws_remaining_by_team=tr)
                 for (ss, tr) in zip(sheet_states, throws_remaining_by_team)
@@ -84,7 +84,7 @@ class TrainingData:
         input_features = normalizer.normalize(raw_inputs)
         return cls(
             input_features=input_features,
-            answers=np.concat(final_scores).reshape((raw_inputs.shape[0], 1)),
+            answers=np.concatenate(final_scores).reshape((raw_inputs.shape[0], 1)),
             normalizer=normalizer,
             raw_inputs=raw_inputs,
         )
@@ -116,7 +116,7 @@ class TrainingData:
             ).reshape((1, 2 * num_stones_per_side + 1))
         ).astype(int)
 
-        answers = np.concat([score.reshape((num_sims, 1)), score_matches], axis=1)
+        answers = np.concatenate([score.reshape((num_sims, 1)), score_matches], axis=1)
 
         normalizer = Normalizer.from_features(raw_inputs)
         input_features = normalizer.normalize(raw_inputs)
