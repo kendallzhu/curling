@@ -232,7 +232,9 @@ class NN:
         loss_function: LossFunction,
     ):
         inputs = input_features[:, :, None]
-        actual = answers[:, None, None]
+        actual = (
+            answers[:, None, None] if len(answers.shape) == 1 else answers[:, :, None]
+        )
 
         prediction = self.run(inputs)
         loss = loss_function.get_loss(prediction, actual)
@@ -283,7 +285,11 @@ class NN:
         regularization: float,
     ):
         inputs = batch.input_features[:, :, None]
-        actual = batch.answers[:, None, None]
+        actual = (
+            batch.answers[:, None, None]
+            if len(batch.answers.shape) == 1
+            else batch.answers[:, :, None]
+        )
 
         prediction = self.run(inputs)
         output_gradient = loss_function.output_gradient(prediction, actual)
