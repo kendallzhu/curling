@@ -122,7 +122,7 @@ class TrainingData:
         input_features = normalizer.normalize(raw_inputs)
         return cls(
             input_features=input_features,
-            answers=score.reshape((num_sims, 1)),
+            answers=score_matches,
             normalizer=normalizer,
             raw_inputs=raw_inputs,
         )
