@@ -118,7 +118,7 @@ def get_throw_grid_search(state: SheetStates, team: int) -> tuple[Throw, float, 
 
 class CurlingPolicy(Protocol):
     def make_throws(
-        self, sheet_states: SheetStates, rng: np.random.Generator
+        self, sheet_states: SheetStates, team: int, rng: np.random.Generator
     ) -> Throws: ...
 
 
@@ -146,7 +146,7 @@ class ArgmaxRandomThrowPolicy(CurlingPolicy):
         self,
         n_throws_per_state: int,
         random_action_prob: float,
-        scoring_function: Callable[SheetStates, np.array],
+        scoring_function: Callable[[SheetStates, int], np.ndarray],
     ):
         self.n_throws_per_state = n_throws_per_state
         self.scoring_function = scoring_function
@@ -169,7 +169,7 @@ class ArgmaxRandomThrowPolicy(CurlingPolicy):
         neural_network: nn.NN,
         normalizer: Normalizer,
     ):
-        def scoring_function(sheet_states: SheetStates, team: int) -> np.array:
+        def scoring_function(sheet_states: SheetStates, team: int) -> np.ndarray:
             total_remaining_throws = 2 * num_stones_per_side - sheet_states.x.shape[1]
             input_features = sheet_states.to_input_features(
                 (
@@ -198,7 +198,7 @@ class ArgmaxRandomThrowPolicy(CurlingPolicy):
         final_states_by_throw = physics.run_until_stopping(
             sheet_states=add_stones_from_throws(starting_states, throws)
         )
-        scores = self.scoring_function(final_states_by_throw, team=team)
+        scores = self.scoring_function(final_states_by_throw, team)
         chosen_throws = np.where(
             rng.uniform(0, 1, size=num_sims) < self.random_action_prob,
             rng.integers(self.n_throws_per_state, size=num_sims),
