@@ -37,6 +37,22 @@ class SheetStates:
     velocities: Velocities
     rotation_directions: np.ndarray  # (num_sims, num_stones) 0/-1/1
 
+    def shuffle_stones(self, rng: np.random.Generator) -> "SheetStates":
+        num_sims, num_stones = self.team.shape
+        perms = np.argsort(rng.random((num_sims, num_stones)), axis=1)
+
+        row_idx = np.arange(num_sims)[:, None]
+        return SheetStates(
+            team=self.team[row_idx, perms],
+            x=self.x[row_idx, perms],
+            y=self.y[row_idx, perms],
+            velocities=Velocities(
+                v=self.velocities.v[row_idx, perms],
+                theta=self.velocities.theta[row_idx, perms],
+            ),
+            rotation_directions=self.rotation_directions[row_idx, perms],
+        )
+
     def num_stones(self, of_team):
         return np.sum(self.team[0] == of_team)
 
@@ -71,6 +87,66 @@ class SheetStates:
     def is_any_stone_moving(self) -> bool:
         return bool(np.any(self.velocities.v > 0))
 
+    def distance_from_center_of_house(self) -> np.array:
+        return np.sqrt((self.x - center_of_target_house) ** 2 + (self.y - 2.5) ** 2)
+
+    def to_input_features(
+        self, throws_remaining_by_team: tuple[int, int]
+    ) -> np.ndarray:
+        num_sims, num_existing_stones = self.x.shape
+        is_thrown = np.concat(
+            [
+                np.where(self.x == 0, 0, 1),
+                np.zeros((num_sims, sum(throws_remaining_by_team))),
+            ],
+            axis=1,
+        )
+        team = np.concat(
+            [
+                self.team,
+                np.zeros((num_sims, throws_remaining_by_team[0]), dtype=int),
+                np.ones((num_sims, throws_remaining_by_team[1]), dtype=int),
+            ],
+            axis=1,
+        )
+        x = np.concat(
+            [self.x, np.zeros((num_sims, sum(throws_remaining_by_team)))], axis=1
+        )
+        y = np.concat(
+            [self.y, np.zeros((num_sims, sum(throws_remaining_by_team)))], axis=1
+        )
+        distance_from_center = np.concat(
+            [
+                self.distance_from_center_of_house(),
+                np.ones((num_sims, sum(throws_remaining_by_team)))
+                * center_of_target_house,
+            ],
+            axis=1,
+        )
+        is_in_house = np.where(
+            distance_from_center < house_outer_circle_radius + STONE_RADIUS_M,
+            1,
+            0,
+        )
+        return np.concat(
+            [is_thrown, team, x, y, distance_from_center, is_in_house], axis=1
+        )
+
+
+def concat(states: list[SheetStates]) -> SheetStates:
+    return SheetStates(
+        team=np.concat([state.team for state in states], axis=0),
+        x=np.concat([state.x for state in states], axis=0),
+        y=np.concat([state.y for state in states], axis=0),
+        velocities=Velocities(
+            v=np.concat([state.velocities.v for state in states], axis=0),
+            theta=np.concat([state.velocities.theta for state in states], axis=0),
+        ),
+        rotation_directions=np.concat(
+            [state.rotation_directions for state in states], axis=0
+        ),
+    )
+
 
 @dataclass
 class Throw:
@@ -79,6 +155,15 @@ class Throw:
     turn: int
     y_val: float
     team: int
+
+
+@dataclass
+class Throws:
+    angle_deg: np.array
+    speed: np.array
+    turn: np.array
+    y_val: np.array
+    team: np.array
 
 
 @dataclass
@@ -156,6 +241,17 @@ def add_new_stone_raw(
             ),
         ),
         team=np.concatenate([old_stones.team, team.reshape((num_sims, 1))], axis=1),
+    )
+
+
+def add_stones_from_throws(state: SheetStates, throws: Throws) -> SheetStates:
+    return add_new_stone_raw(
+        old_stones=state,
+        rotation_directions=throws.turn,
+        v_0=throws.speed,
+        theta_0=throws.angle_deg * np.pi / 180,
+        y_0=throws.y_val,
+        team=throws.team,
     )
 
 

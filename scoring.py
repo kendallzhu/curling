@@ -1,13 +1,11 @@
 import numpy as np
-from constants import center_of_target_house, house_outer_circle_radius, STONE_RADIUS_M
+from constants import house_outer_circle_radius, STONE_RADIUS_M
 from state import SheetStates
 
 
 def get_score(sheet_states: SheetStates) -> np.ndarray:  # (num_sims, 2)
     num_sims = sheet_states.x.shape[0]
-    distance_from_center = np.sqrt(
-        (sheet_states.x - center_of_target_house) ** 2 + (sheet_states.y - 2.5) ** 2
-    )
+    distance_from_center = sheet_states.distance_from_center_of_house()
     team_scores = np.zeros((num_sims, 2), dtype=int)
 
     if distance_from_center.shape[1] == 0:
@@ -27,6 +25,9 @@ def get_score(sheet_states: SheetStates) -> np.ndarray:  # (num_sims, 2)
         ).sum(axis=1)
     return team_scores
 
-def get_net_score_for_team(sheet_states: SheetStates, team: int)  -> np.ndarray:  # (num_sims, 1)
+
+def get_net_score_for_team(
+    sheet_states: SheetStates, team: int
+) -> np.ndarray:  # (num_sims, 1)
     scores = get_score(sheet_states)
     return scores[:, team] - scores[:, 1 - team]
