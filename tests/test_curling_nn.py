@@ -37,8 +37,7 @@ def test_basic_score_prediction():
         seed=0,
         num_stones_per_side=num_stones_per_side,
         hidden_layer_size=20,
-        output_layer_size=2 * num_stones_per_side + 1,
-        include_sigmoid=True,
+        output_layer_size=2 * num_stones_per_side + 1
     )
 
     loss_function = nn.CrossEntropyLoss()
