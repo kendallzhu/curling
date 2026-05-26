@@ -59,8 +59,7 @@ class ValueNetwork(nn.NN):
         seed: int,
         num_stones_per_side: int,
         hidden_layer_size: int = 20,
-        output_layer_size: int = 1,
-        include_sigmoid: bool = False,
+        output_layer_size: int = 1
     ):
         rng = np.random.default_rng(seed)
 
@@ -89,6 +88,5 @@ class ValueNetwork(nn.NN):
         )
 
         layers = [l1, act1, l2, act2, l3, act3, l4]
-        if include_sigmoid:
-            layers.append(nn.MapTo01())
+        layers.append(nn.MapTo01())
         super().__init__(layers)
