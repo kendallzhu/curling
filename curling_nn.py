@@ -36,7 +36,7 @@ class InputFeatures:
         sheet_states: state.SheetStates,
         num_stones_per_side: int,
     ) -> dataset.TrainingData:
-        score = scoring.get_score(sheet_states) @ np.array([1, -1])
+        score = scoring.get_net_score_for_team(sheet_states, 0)
         score_matches = (
             score.reshape((sheet_states.x.shape[0], 1))
             == np.arange(
