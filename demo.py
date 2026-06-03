@@ -12,7 +12,7 @@ from presets import (
     guard_sheet_states,
     random_sheet_states,
 )
-from state import empty_board, remove_stones_off_sheet
+from state import empty_board
 from user_interface import (
     render_sheet,
     render_ui,
@@ -121,7 +121,6 @@ if __name__ == "__main__":
         actual_timesteps, next_sheet_states = run_to_next_collision_or_stop(
             sheet_states=copy.deepcopy(next_sheet_states), max_frame_time=max_frame_time
         )
-        next_sheet_states = remove_stones_off_sheet(next_sheet_states)
         has_state_changed = not (previous_sheet_states == next_sheet_states)
         previous_sheet_states = next_sheet_states
 

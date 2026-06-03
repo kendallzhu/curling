@@ -14,15 +14,16 @@ def test_random_sheet_states_returns_expected_shape_and_counts():
 
     assert sheet_states.x.shape == (1, 5)
     assert sheet_states.y.shape == (1, 5)
-    assert sheet_states.team.shape == (1, 5)
-    assert np.sum(sheet_states.team == 0) == 3
-    assert np.sum(sheet_states.team == 1) == 2
+    assert sheet_states.stone_teams().shape == (1, 5)
+    assert np.sum(sheet_states.stone_teams() == 0) == 3
+    assert np.sum(sheet_states.stone_teams() == 1) == 2
     assert np.all(sheet_states.velocities.v == 0.0)
     assert np.all(sheet_states.velocities.theta == 0.0)
     assert np.all(sheet_states.rotation_directions == 0)
 
 
 def test_random_sheet_states_guard_stones_are_outside_house():
+    np.random.seed(42)
     sheet_states = random_sheet_states(team1=10, team2=0)
     x = sheet_states.x[0]
     y = sheet_states.y[0]

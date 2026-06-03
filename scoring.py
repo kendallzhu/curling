@@ -16,7 +16,7 @@ def get_score(sheet_states: SheetStates) -> np.ndarray:  # (num_sims, 2)
 
     for i in range(2):
         team_closest_stone_in_house[:, i] = np.min(
-            np.where((sheet_states.team == i) & in_house, distance_from_center, np.inf),
+            np.where((sheet_states.stone_teams() == i) & in_house, distance_from_center, np.inf),
             axis=1,
         )
     for i in range(2):

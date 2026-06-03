@@ -193,7 +193,7 @@ def run_to_next_collision_or_stop(
 ) -> tuple[np.ndarray, SheetStates]:
     separate_overlapping_stones(sheet_states)
     num_sims_total = sheet_states.velocities.v.shape[0]
-    if sheet_states.team.shape[1] == 0:
+    if sheet_states.x.shape[1] == 0:
         return np.zeros((num_sims_total, 1)), sheet_states
 
     sim_done_mask = np.max(sheet_states.velocities.v, axis=1) > 0

@@ -117,13 +117,12 @@ def run_to_next_collision_or_stop(
 ) -> tuple[np.ndarray, SheetStates]:
     sheet_states = separate_overlapping_stones(sheet_states)
     num_sims_total = sheet_states.velocities.v.shape[0]
-    if sheet_states.team.shape[1] == 0:
+    if sheet_states.x.shape[1] == 0:
         return np.zeros((num_sims_total, 1)), sheet_states
 
     sim_done_mask = np.max(sheet_states.velocities.v, axis=1) > 0
     v = sheet_states.velocities.v[sim_done_mask, :]
     theta = sheet_states.velocities.theta[sim_done_mask, :]
-    team = sheet_states.team[sim_done_mask, :]
     x = sheet_states.x[sim_done_mask, :]
     y = sheet_states.y[sim_done_mask, :]
     rotation_directions = sheet_states.rotation_directions[sim_done_mask, :]
@@ -249,12 +248,11 @@ def run_sim_linear(
 ) -> tuple[np.ndarray, SheetStates]:
     v = sheet_states.velocities.v
     theta = sheet_states.velocities.theta
-    team = sheet_states.team
     x = sheet_states.x
     y = sheet_states.y
     num_sims, num_stones = v.shape
 
-    if team.shape[1] == 0:
+    if x.shape[1] == 0:
         return np.zeros((num_sims, 1)), sheet_states
 
     time_to_stop = v / (mu * g)
