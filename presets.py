@@ -14,10 +14,6 @@ def random_sheet_states(*, team1: int, team2: int, num_sims: int = 1) -> SheetSt
     num_stones = num_team0 + num_team1
     x = np.zeros((num_sims, num_stones), dtype=float)
     y = np.empty((num_sims, num_stones), dtype=float)
-    team = np.concatenate(
-        [np.zeros((num_sims, num_team0), dtype=int), np.ones((num_sims, num_team1), dtype=int)],
-        axis=1
-    )
 
     angle = np.random.uniform(0.0, 2.0 * np.pi, size=(num_sims, num_stones))
     radius = house_outer_circle_radius * np.sqrt(np.random.uniform(0.0, 1.0, size=(num_sims, num_stones)))
@@ -30,7 +26,7 @@ def random_sheet_states(*, team1: int, team2: int, num_sims: int = 1) -> SheetSt
 
 
     return SheetStates(
-        team=team,
+        first_team=np.zeros(num_sims, dtype=int),
         x=x,
         y=y,
         velocities=Velocities(
@@ -43,7 +39,7 @@ def random_sheet_states(*, team1: int, team2: int, num_sims: int = 1) -> SheetSt
 
 def demo_collisions_sheet_states() -> SheetStates:
     return SheetStates(
-        team=np.array([[0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1]]),
+        first_team=np.array([0]),
         x=np.array(
             [
                 [
@@ -81,7 +77,7 @@ def demo_collisions_sheet_states() -> SheetStates:
 
 def guard_sheet_states() -> SheetStates:
     return SheetStates(
-        team=np.array([[0, 1]]),
+        first_team=np.array([0]),
         x=np.array([[36.6, 39.6]]),
         y=np.array([[2.5, 2.5]]),
         velocities=Velocities(

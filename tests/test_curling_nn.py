@@ -9,11 +9,12 @@ import dataset
 import nn
 import curling_nn
 import presets
-
+import time
 
 def test_basic_score_prediction():
+    start_time = time.time()
     num_stones_per_side = 2
-    np.random.seed(0)
+    np.random.seed(1)
 
     states = presets.random_sheet_states(
         team1=num_stones_per_side,
@@ -48,7 +49,7 @@ def test_basic_score_prediction():
 
     for i in range(num_iters):
         lr = 1 * 0.5 * (1 + np.cos(np.pi * i / num_iters))
-        for batch in data.shuffle_batches(num_points_per_batch, seed=None):
+        for batch in data.shuffle_batches(num_points_per_batch, seed=0):
             neural_network.train_batched(
                 batch,
                 loss_function,
@@ -70,4 +71,6 @@ def test_basic_score_prediction():
         / (data_validation.answers ** 2).sum()
     )
 
+    print(f"validation r^2 is {validation_r2}")
+    print(f"runtime: {time.time() - start_time}")
     assert validation_r2 >= 0.5, f"Error: validation r^2 should be at least .5 but is {validation_r2}!"

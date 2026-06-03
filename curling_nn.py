@@ -19,8 +19,8 @@ class InputFeatures:
         )
         raw_features = np.concatenate(
             [
+                sheet_states.first_team.reshape((sheet_states.x.shape[0], 1)),
                 is_thrown,
-                sheet_states.team,
                 sheet_states.x,
                 sheet_states.y,
                 distance_from_center,
@@ -63,7 +63,7 @@ class ValueNetwork(nn.NN):
     ):
         rng = np.random.default_rng(seed)
 
-        input_layer_size = 6 * 2 * num_stones_per_side
+        input_layer_size = 5 * 2 * num_stones_per_side + 1
 
         l1 = nn.LinearBatched(
             rng.normal(size=(hidden_layer_size, input_layer_size))

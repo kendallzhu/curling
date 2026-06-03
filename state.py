@@ -31,26 +31,31 @@ class Velocities:
 
 @dataclass
 class SheetStates:
-    team: np.ndarray  # (num_sims, num_stones) 0/1
+    first_team: np.ndarray  # (num_sims,) 0/1
     x: np.ndarray  # (num_sims, num_stones)
     y: np.ndarray  # (num_sims, num_stones)
     velocities: Velocities
     rotation_directions: np.ndarray  # (num_sims, num_stones) 0/-1/1
 
-    def num_stones(self, of_team):
-        return np.sum(self.team[0] == of_team)
+    def num_stones(self, of_team): # (num_sims)
+        return np.sum(self.stone_teams() == of_team, axis=1)
 
-    def team_with_fewer_stones(self):
-        return 0 if self.num_stones(0) < self.num_stones(1) else 1
+    def team_with_fewer_stones(self): # (num_sims)
+        return np.where(self.num_stones(0) < self.num_stones(1), 0, 1)
+
+    def stone_teams(self): # (num_sims, num_stones)
+        num_sims, num_stones = self.x.shape
+        return (self.first_team.reshape((num_sims, 1)) + np.arange(num_stones, dtype=int).reshape((1,num_stones))) % 2
 
     def get_sheet(self, sim_index: int) -> SheetState:
         stones = []
+        teams_by_stone = self.stone_teams()
         for i in range(len(self.x[sim_index])):
             stones.append(
                 StoneState(
                     x=self.x[sim_index][i],
                     y=self.y[sim_index][i],
-                    team=self.team[sim_index][i],
+                    team=teams_by_stone[sim_index][i],
                     rotation_direction=self.rotation_directions[sim_index][i],
                 )
             )
@@ -62,7 +67,7 @@ class SheetStates:
         return (
             np.array_equal(self.x, other.x)
             and np.array_equal(self.y, other.y)
-            and np.array_equal(self.team, other.team)
+            and np.array_equal(self.stone_teams(), other.stone_teams())
             and np.array_equal(self.rotation_directions, other.rotation_directions)
             and np.array_equal(self.velocities.v, other.velocities.v)
             and np.array_equal(self.velocities.theta, other.velocities.theta)
@@ -77,7 +82,7 @@ class SheetStates:
 
 def concat(states: list[SheetStates]) -> SheetStates:
     return SheetStates(
-        team=np.concatenate([state.team for state in states], axis=0),
+        first_team=np.concatenate([state.first_team for state in states], axis=0),
         x=np.concatenate([state.x for state in states], axis=0),
         y=np.concatenate([state.y for state in states], axis=0),
         velocities=Velocities(
@@ -125,19 +130,19 @@ class SheetHistories:
 
 def empty_board(num_sims: int) -> SheetStates:
     return SheetStates(
+        first_team=np.zeros(num_sims, dtype=int),
         x=np.zeros((num_sims, 0)),
         y=np.zeros((num_sims, 0)),
         rotation_directions=np.zeros((num_sims, 0)),
         velocities=Velocities(v=np.zeros((num_sims, 0)), theta=np.zeros((num_sims, 0))),
-        team=np.zeros((num_sims, 0)),
     )
 
 
 def tile_sheet_states(state: SheetStates, num_copies: int) -> SheetStates:
     return SheetStates(
+        first_team=np.tile(state.first_team, num_copies),
         x=np.tile(state.x, (num_copies, 1)),
         y=np.tile(state.y, (num_copies, 1)),
-        team=np.tile(state.team, (num_copies, 1)),
         rotation_directions=np.tile(state.rotation_directions, (num_copies, 1)),
         velocities=Velocities(
             v=np.tile(state.velocities.v, (num_copies, 1)),
@@ -163,6 +168,7 @@ def add_new_stone_raw(
         and len(y_0) == num_sims
     )
     return SheetStates(
+        first_team=old_stones.first_team,
         x=np.concatenate(
             [old_stones.x, np.ones((num_sims, 1)) * starting_release_point], axis=1
         ),
@@ -182,7 +188,6 @@ def add_new_stone_raw(
                 [old_stones.velocities.theta, theta_0.reshape((num_sims, 1))], axis=1
             ),
         ),
-        team=np.concatenate([old_stones.team, team.reshape((num_sims, 1))], axis=1),
     )
 
 
@@ -194,29 +199,6 @@ def add_stones_from_throws(state: SheetStates, throws: Throws) -> SheetStates:
         theta_0=throws.angle_deg * np.pi / 180,
         y_0=throws.y_val,
         team=throws.team,
-    )
-
-
-def remove_stones_off_sheet(state: SheetStates) -> SheetStates:
-    is_on_sheet = (
-        (state.x >= -STONE_RADIUS_M)
-        & (
-            state.x
-            <= center_of_target_house + house_outer_circle_radius + 5 * STONE_RADIUS_M
-        )
-        & (state.y >= -STONE_RADIUS_M)
-        & (state.y <= SHEET_H_M + STONE_RADIUS_M)
-    )
-    mask_to_keep = np.any(is_on_sheet, axis=0)
-    return SheetStates(
-        x=state.x[:, mask_to_keep],
-        y=state.y[:, mask_to_keep],
-        rotation_directions=state.rotation_directions[:, mask_to_keep],
-        velocities=Velocities(
-            v=state.velocities.v[:, mask_to_keep],
-            theta=state.velocities.theta[:, mask_to_keep],
-        ),
-        team=state.team[:, mask_to_keep],
     )
 
 
@@ -243,9 +225,6 @@ def add_new_stones(state: SheetStates, throws: list[Throw]) -> SheetStates:
     new_y = np.concatenate(
         [state.y, np.array([t.y_val for t in throws]).reshape(num_sims, 1)], axis=1
     )
-    new_team = np.concatenate(
-        [state.team, np.array([t.team for t in throws]).reshape(num_sims, 1)], axis=1
-    )
     new_v = np.concatenate(
         [state.velocities.v, np.array([t.speed for t in throws]).reshape(num_sims, 1)],
         axis=1,
@@ -265,9 +244,9 @@ def add_new_stones(state: SheetStates, throws: list[Throw]) -> SheetStates:
         axis=1,
     )
     return SheetStates(
+        first_team=state.first_team,
         x=new_x,
         y=new_y,
-        team=new_team,
         rotation_directions=new_rotation,
         velocities=Velocities(v=new_v, theta=new_theta),
     )
