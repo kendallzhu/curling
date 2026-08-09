@@ -1,3 +1,7 @@
+from __future__ import annotations
+
+from pathlib import Path
+
 import numpy as np
 
 import nn
@@ -80,7 +84,9 @@ class ValueNetwork(nn.NN):
         hidden_layer_size: int = 20,
         output_layer_size: int | None = None,
     ):
-        self.num_stones_per_side = ((num_stones + 1) // 2)
+        self.num_stones = num_stones
+        self.hidden_layer_size = hidden_layer_size
+        self.num_stones_per_side = (num_stones + 1) // 2
         if output_layer_size is None:
             output_layer_size = 2 * self.num_stones_per_side + 1
         rng = np.random.default_rng(seed)
@@ -116,6 +122,8 @@ class ValueNetwork(nn.NN):
 
         super().__init__(layers)
 
+    def linear_layers(self) -> list[nn.LinearBatched]:
+        return [layer for layer in self.layers if isinstance(layer, nn.LinearBatched)]
 
     def expected_score(self, nn_output: np.ndarray) -> np.ndarray:
         """Expected net score from categorical output nodes over [-n, n]."""
@@ -126,3 +134,39 @@ class ValueNetwork(nn.NN):
         )
         assert weights.shape[1] == score_values.shape[0]
         return weights @ score_values
+
+
+def write_weights(
+    path: str | Path,
+    neural_network: ValueNetwork,
+    normalizer: dataset.Normalizer,
+) -> None:
+    arrays: dict[str, np.ndarray] = {
+        "num_stones": np.asarray(neural_network.num_stones),
+        "hidden_layer_size": np.asarray(neural_network.hidden_layer_size),
+        "feature_means": np.asarray(normalizer.feature_means),
+        "feature_stdevs": np.asarray(normalizer.feature_stdevs),
+    }
+    for i, layer in enumerate(neural_network.linear_layers()):
+        arrays[f"w{i}"] = layer.weights
+        arrays[f"b{i}"] = layer.bias
+    np.savez(path, **arrays)
+
+
+def load_weights(path: str | Path) -> tuple[ValueNetwork, dataset.Normalizer]:
+    with np.load(path) as data:
+        num_stones = int(data["num_stones"])
+        hidden_layer_size = int(data["hidden_layer_size"])
+        neural_network = ValueNetwork(
+            seed=0,
+            num_stones=num_stones,
+            hidden_layer_size=hidden_layer_size,
+        )
+        for i, layer in enumerate(neural_network.linear_layers()):
+            layer.weights = np.array(data[f"w{i}"], copy=True)
+            layer.bias = np.array(data[f"b{i}"], copy=True)
+        normalizer = dataset.Normalizer(
+            feature_means=np.array(data["feature_means"], copy=True),
+            feature_stdevs=np.array(data["feature_stdevs"], copy=True),
+        )
+    return neural_network, normalizer

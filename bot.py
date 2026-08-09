@@ -25,6 +25,7 @@ from constants import (
     min_release_y,
     max_release_y,
     turn_options,
+    value_network_weights_path,
 )
 
 import nn
@@ -172,27 +173,22 @@ def get_throw_nn_argmax(
     *,
     seed: int = 0,
     throw_searcher: ThrowSearcher | None = None,
-) -> Throw:
-    """Suggest a throw via ArgmaxThrowPolicy.from_nn_predicting_score_diff (random weights for now)."""
+    neural_network: curling_nn.ValueNetwork | None = None,
+    normalizer: Normalizer | None = None,
+) -> tuple[Throw | None, float | None]:
+    """Suggest a throw via ArgmaxThrowPolicy.from_nn_predicting_score_diff.
+
+    Returns (None, None) if the board stone count does not match the network.
+    The float is the NN expected net score for the throwing team.
+    """
     if throw_searcher is None:
         throw_searcher = ThrowsGridSearcher(num_angles=20, num_speeds=20, num_y_vals=6)
-    num_stones = state.x.shape[1]
-    neural_network = curling_nn.ValueNetwork(seed=seed, num_stones=num_stones)
-    num_sims = state.x.shape[0]
-    dummy_throws = Throws(
-        angle_deg=np.zeros(num_sims),
-        speed=np.zeros(num_sims),
-        turn=np.zeros(num_sims, dtype=int),
-        y_val=np.full(num_sims, 2.5),
-        team=np.full(num_sims, team, dtype=int),
-    )
-    feature_dim = curling_nn.InputFeatures.raw_of_sheet_states(
-        state, dummy_throws
-    ).shape[1]
-    normalizer = Normalizer(
-        feature_means=np.zeros(feature_dim),
-        feature_stdevs=np.ones(feature_dim),
-    )
+    if neural_network is None or normalizer is None:
+        neural_network, normalizer = curling_nn.load_weights(
+            value_network_weights_path
+        )
+    if state.x.shape[1] != neural_network.num_stones:
+        return None, None
     policy = ArgmaxThrowPolicy.from_nn_predicting_score_diff(
         random_action_prob=0.0,
         neural_network=neural_network,
@@ -200,13 +196,26 @@ def get_throw_nn_argmax(
         throw_searcher=throw_searcher,
     )
     throws = policy.make_throws(state, team, np.random.default_rng(seed))
-    return Throw(
+    throw = Throw(
         angle_deg=float(throws.angle_deg[0]),
         speed=float(throws.speed[0]),
         turn=int(throws.turn[0]),
         y_val=float(throws.y_val[0]),
         team=int(throws.team[0]),
     )
+    expected_score = float(
+        policy.scoring_function(
+            state,
+            Throws(
+                angle_deg=throws.angle_deg[:1],
+                speed=throws.speed[:1],
+                turn=throws.turn[:1],
+                y_val=throws.y_val[:1],
+                team=throws.team[:1],
+            ),
+        )[0]
+    )
+    return throw, expected_score
 
 
 def get_throw_grid_search(state: SheetStates, team: int) -> tuple[Throw, float, float]:
