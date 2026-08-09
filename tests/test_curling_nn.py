@@ -39,7 +39,7 @@ def test_basic_score_prediction():
 
     neural_network = curling_nn.ValueNetwork(
         seed=0,
-        num_stones_per_side=num_stones_per_side,
+        num_stones=2*num_stones_per_side - 1,
         hidden_layer_size=20,
     )
     loss_function = nn.SoftmaxCrossEntropyLoss()
