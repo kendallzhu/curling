@@ -73,6 +73,65 @@ class TrainingData:
             (X - np.mean(X, axis=0)) / np.std(X, axis=0),
         )
 
+    def partition(
+        self,
+        validation_fraction: float = 0.2,
+        *,
+        seed: int | None = None,
+    ) -> tuple["TrainingData", "TrainingData"]:
+        """Split into (train, validation), sharing one normalizer fit on train.
+
+        Prefer this over generating a separate validation dataset so both splits
+        use the same feature normalization.
+        """
+        if not 0.0 < validation_fraction < 1.0:
+            raise ValueError(
+                f"validation_fraction must be in (0, 1), got {validation_fraction}"
+            )
+        n = self.input_features.shape[0]
+        if n < 2:
+            raise ValueError("Need at least 2 samples to partition")
+        n_val = int(round(n * validation_fraction))
+        n_val = max(1, min(n - 1, n_val))
+
+        rng = np.random.default_rng(seed)
+        indices = rng.permutation(n)
+        val_idx = indices[:n_val]
+        train_idx = indices[n_val:]
+
+        if self.raw_inputs is not None:
+            train_raw = self.raw_inputs[train_idx]
+            val_raw = self.raw_inputs[val_idx]
+            normalizer = Normalizer.from_features(train_raw)
+            train = TrainingData(
+                input_features=normalizer.normalize(train_raw),
+                answers=self.answers[train_idx],
+                normalizer=normalizer,
+                raw_inputs=train_raw,
+            )
+            validation = TrainingData(
+                input_features=normalizer.normalize(val_raw),
+                answers=self.answers[val_idx],
+                normalizer=normalizer,
+                raw_inputs=val_raw,
+            )
+            return train, validation
+
+        return (
+            TrainingData(
+                input_features=self.input_features[train_idx],
+                answers=self.answers[train_idx],
+                normalizer=self.normalizer,
+                raw_inputs=None,
+            ),
+            TrainingData(
+                input_features=self.input_features[val_idx],
+                answers=self.answers[val_idx],
+                normalizer=self.normalizer,
+                raw_inputs=None,
+            ),
+        )
+
     def shuffle_batches(
         self,
         num_points_per_batch: int,
