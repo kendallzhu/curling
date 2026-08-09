@@ -166,6 +166,49 @@ def get_most_robust_throw_with_score(
     return best_throws[best_idx], max_robust_score
 
 
+def get_throw_nn_argmax(
+    state: SheetStates,
+    team: int,
+    *,
+    seed: int = 0,
+    throw_searcher: ThrowSearcher | None = None,
+) -> Throw:
+    """Suggest a throw via ArgmaxThrowPolicy.from_nn_predicting_score_diff (random weights for now)."""
+    if throw_searcher is None:
+        throw_searcher = ThrowsGridSearcher(num_angles=20, num_speeds=20, num_y_vals=6)
+    num_stones = state.x.shape[1]
+    neural_network = curling_nn.ValueNetwork(seed=seed, num_stones=num_stones)
+    num_sims = state.x.shape[0]
+    dummy_throws = Throws(
+        angle_deg=np.zeros(num_sims),
+        speed=np.zeros(num_sims),
+        turn=np.zeros(num_sims, dtype=int),
+        y_val=np.full(num_sims, 2.5),
+        team=np.full(num_sims, team, dtype=int),
+    )
+    feature_dim = curling_nn.InputFeatures.raw_of_sheet_states(
+        state, dummy_throws
+    ).shape[1]
+    normalizer = Normalizer(
+        feature_means=np.zeros(feature_dim),
+        feature_stdevs=np.ones(feature_dim),
+    )
+    policy = ArgmaxThrowPolicy.from_nn_predicting_score_diff(
+        random_action_prob=0.0,
+        neural_network=neural_network,
+        normalizer=normalizer,
+        throw_searcher=throw_searcher,
+    )
+    throws = policy.make_throws(state, team, np.random.default_rng(seed))
+    return Throw(
+        angle_deg=float(throws.angle_deg[0]),
+        speed=float(throws.speed[0]),
+        turn=int(throws.turn[0]),
+        y_val=float(throws.y_val[0]),
+        team=int(throws.team[0]),
+    )
+
+
 def get_throw_grid_search(state: SheetStates, team: int) -> tuple[Throw, float, float]:
     candidate_throws = ThrowsGridSearcher(
         num_angles=20, num_speeds=20, num_y_vals=6
