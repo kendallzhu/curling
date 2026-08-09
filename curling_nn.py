@@ -59,7 +59,7 @@ class ValueNetwork(nn.NN):
         seed: int,
         num_stones_per_side: int,
         hidden_layer_size: int = 20,
-        output_layer_size: int = 1
+        output_layer_size: int = 11
     ):
         rng = np.random.default_rng(seed)
 
