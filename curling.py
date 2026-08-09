@@ -9,7 +9,7 @@ import user_interface
 
 if __name__ == "__main__":
     demo_collisions_sheet_states = SheetStates(
-        team=np.array([[0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1]]),
+        first_team=np.array([0]),
         x=np.array(
             [
                 [
@@ -45,7 +45,7 @@ if __name__ == "__main__":
     )
 
     guard_sheet_states = SheetStates(
-        team=np.array([[0, 1]]),
+        first_team=np.array([0]),
         x=np.array([[36.6, 39.6]]),
         y=np.array([[2.5, 2.5]]),
         velocities=Velocities(
@@ -66,7 +66,7 @@ if __name__ == "__main__":
     ui_state = user_interface.UIState()
 
     while True:
-        next_team_to_play = current_sheet_states.team_with_fewer_stones()
+        next_team_to_play = int(current_sheet_states.team_with_fewer_stones()[0])
         score = get_score(current_sheet_states)[0]
 
         for event in pygame.event.get():

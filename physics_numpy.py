@@ -320,7 +320,7 @@ def run_sim_linear(
 
     return time_to_next_event.flatten(), separate_overlapping_stones(
         SheetStates(
-            team=team,
+            first_team=sheet_states.first_team,
             x=x,
             y=y,
             velocities=Velocities(
@@ -355,7 +355,6 @@ def run_until_stopping(*, sheet_states, max_frame_time: float = np.inf) -> Sheet
 def run_until_stopping_with_history_linear(
     *, sheet_states: SheetStates, max_frame_time: float
 ) -> tuple[SheetStates, SheetHistories]:
-    frame_count = 0
     historical_states = [copy.deepcopy(sheet_states)]
     historical_times = [np.zeros((sheet_states.x.shape[0], 1), dtype=np.float64)]
     while np.max(sheet_states.velocities.v) > 0:

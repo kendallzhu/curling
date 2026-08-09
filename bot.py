@@ -238,7 +238,19 @@ class ArgmaxThrowPolicy(CurlingPolicy):
         throw_searcher: ThrowSearcher,
     ):
         def scoring_function(sheet_states: SheetStates, team: int) -> np.ndarray:
-            input_features = curling_nn.InputFeatures.create_of_sheet_states(sheet_states)
+            #TODO: this is malformed
+            num_sims = sheet_states.x.shape[0]
+            # Placeholder throws satisfy the feature builder; scoring is over final boards.
+            throws = Throws(
+                angle_deg=np.zeros(num_sims),
+                speed=np.zeros(num_sims),
+                turn=np.zeros(num_sims, dtype=int),
+                y_val=np.full(num_sims, 2.5),
+                team=sheet_states.next_team_to_play(),
+            )
+            input_features = curling_nn.InputFeatures.create_of_sheet_states(
+                sheet_states, throws
+            )
             nn_output = neural_network.run(
                 normalizer.normalize(input_features)[:, :, None]
             )
@@ -251,10 +263,12 @@ class ArgmaxThrowPolicy(CurlingPolicy):
         )
 
     def make_throws(
-        self, sheet_states: SheetStates, team: int
+        self, sheet_states: SheetStates, team: int, rng: np.random.Generator
     ):
         num_sims = sheet_states.x.shape[0]
-        repeated_throws, tiled_starting_states = self.throw_searcher.get_throws_for_sheets(team=team, sheet_states=sheet_states)
+        repeated_throws, tiled_starting_states = self.throw_searcher.get_throws_for_num_sims(
+            team=team, sheet_states=sheet_states
+        )
 
         final_states_by_throw = physics.run_until_stopping(
             sheet_states=add_stones_from_throws(tiled_starting_states, repeated_throws)

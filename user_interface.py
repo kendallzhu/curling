@@ -394,7 +394,7 @@ def handle_mouse_input(
             yx + normalize(ui_state.y_val, min_release_y, max_release_y) * yw
         )
 
-        next_team_to_play = current_sheet_states.team_with_fewer_stones()
+        next_team_to_play = int(current_sheet_states.team_with_fewer_stones()[0])
 
         if btn_rect.collidepoint(mx, my):
             # Add stone to sheet

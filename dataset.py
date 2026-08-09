@@ -95,7 +95,7 @@ class TrainingData:
 
     def plot_data(self, ax=None, figsize=(10, 10), size: int = 20):
         if ax is None:
-            fig, ax = plt.subplots(figsize=figsize)
+            _, ax = plt.subplots(figsize=figsize)
         ax.scatter(
             self.input_features[self.answers == 0, 0],
             self.input_features[self.answers == 0, 1],

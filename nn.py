@@ -119,7 +119,6 @@ class LinearBatched(Layer):
         ), f"Error: expected output gradient with shape ({self.current_batch_size}, {expected_n_out}, 1) but got {output_gradient.shape}"
         self.output_gradient = output_gradient
         input_gradient = self.weights.T @ output_gradient
-        n_out, n_in = self.weights.shape
         average_weight_gradient = (
             output_gradient[:, :, 0].T
             @ self.previous_inputs[:, :, 0]
@@ -177,8 +176,8 @@ class NN:
     ):
         prediction = self.run(inputs)
         initial_output_gradient = loss_function.output_gradient(prediction, actual)
-        input_gradients_by_layer: list[np.ndarray | None] = [None for i in self.layers]
-        gradients_by_layer: list[LinearGradients | None] = [None for i in self.layers]
+        input_gradients_by_layer: list[np.ndarray | None] = [None for _ in self.layers]
+        gradients_by_layer: list[LinearGradients | None] = [None for _ in self.layers]
         output_gradient = initial_output_gradient
         for layer_idx, layer in reversed(list(enumerate(self.layers))):
             input_gradient, gradients = layer.get_gradients(output_gradient)
