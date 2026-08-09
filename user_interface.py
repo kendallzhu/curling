@@ -11,6 +11,12 @@ from constants import (
     SHEET_H_M,
     STONE_RADIUS_M,
     ROTATION_RATE,
+    min_release_angle,
+    max_release_angle,
+    min_release_speed,
+    max_release_speed,
+    min_release_y,
+    max_release_y,
 )
 from state import (
     Throw,
@@ -38,16 +44,6 @@ def normalize(value, min, max):
 
 def denormalize(normalized, min, max):
     return min + normalized * (max - min)
-
-
-min_release_angle = -4
-max_release_angle = 4
-
-min_release_speed = 1.8
-max_release_speed = 4.0
-
-min_release_y = 2.25
-max_release_y = 2.75
 
 
 @dataclass
