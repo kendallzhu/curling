@@ -67,7 +67,8 @@ if __name__ == "__main__":
 
     next_team_to_play = 1
 
-    bot_throw = ui_state.bot_throw = None
+    ui_state.bot_throw = None
+    ui_state.bot_throw_nn = None
 
     lag_tracker = LagTracker()
     has_state_changed = True
@@ -114,6 +115,12 @@ if __name__ == "__main__":
                 f"Bot target score: {bot_target_score}, robust score: {bot_robust_score}"
             )
             ui_state.bot_throw = bot_throw
+
+            bot_throw_nn = bot.get_throw_nn_argmax(
+                next_sheet_states, next_team_to_play
+            )
+            print("Bot NN chosen throw:", bot_throw_nn)
+            ui_state.bot_throw_nn = bot_throw_nn
 
         pygame.display.flip()
 

@@ -56,6 +56,7 @@ class UIState:
     dragging_speed: bool = False
     dragging_y: bool = False
     bot_throw: Throw | None = None
+    bot_throw_nn: Throw | None = None
 
     def to_next_throw(self, team: int) -> Throw:
         return Throw(
@@ -243,7 +244,9 @@ def render_preset_buttons(surface):
     return empty_rect, preset1_rect, preset2_rect
 
 
-def draw_panel(surface, angle, speed, y_val, turn_val, score, bot_throw=None):
+def draw_panel(
+    surface, angle, speed, y_val, turn_val, score, bot_throw=None, bot_throw_nn=None
+):
     sw, sh = surface.get_size()
     panel_y = sh - PANEL_H
     pygame.draw.rect(surface, (40, 40, 40), (0, panel_y, sw, PANEL_H))
@@ -267,8 +270,17 @@ def draw_panel(surface, angle, speed, y_val, turn_val, score, bot_throw=None):
         (bot_btn_rect.x + 5, bot_btn_rect.y + 10),
     )
 
+    # Bot throw NN button
+    bot_nn_btn_rect = pygame.Rect(230, panel_y + 20, 120, 40)
+    nn_btn_color = (120, 100, 160) if bot_throw_nn else (80, 80, 80)
+    pygame.draw.rect(surface, nn_btn_color, bot_nn_btn_rect, border_radius=6)
+    surface.blit(
+        font.render("Bot Throw NN", True, (255, 255, 255)),
+        (bot_nn_btn_rect.x + 5, bot_nn_btn_rect.y + 10),
+    )
+
     # Turn toggle
-    turn_x = 230
+    turn_x = 360
     turn_rect = pygame.Rect(turn_x, panel_y + 20, 100, 40)
     pygame.draw.rect(surface, TURN_COLOURS[turn_val], turn_rect, border_radius=6)
     surface.blit(
@@ -277,7 +289,7 @@ def draw_panel(surface, angle, speed, y_val, turn_val, score, bot_throw=None):
     )
 
     # Angle slider
-    angle_x = 340
+    angle_x = 470
     slider_y = panel_y + 40
     slider_w = 140
     pygame.draw.rect(
@@ -296,7 +308,7 @@ def draw_panel(surface, angle, speed, y_val, turn_val, score, bot_throw=None):
     )
 
     # Speed slider
-    speed_x = 495
+    speed_x = 625
     pygame.draw.rect(
         surface,
         (100, 100, 100),
@@ -313,7 +325,7 @@ def draw_panel(surface, angle, speed, y_val, turn_val, score, bot_throw=None):
     )
 
     # Y offset slider
-    y_x = 670
+    y_x = 800
     pygame.draw.rect(
         surface,
         (100, 100, 100),
@@ -336,6 +348,7 @@ def draw_panel(surface, angle, speed, y_val, turn_val, score, bot_throw=None):
     return (
         btn_rect,
         bot_btn_rect,
+        bot_nn_btn_rect,
         (angle_x, slider_y, slider_w),
         (speed_x, slider_y, slider_w),
         (y_x, slider_y, slider_w),
@@ -355,7 +368,17 @@ def render_ui(surface, ui_state: UIState, score, next_team: int):
         ui_state.turn_val,
         score,
         ui_state.bot_throw,
+        ui_state.bot_throw_nn,
     )
+
+
+def _apply_suggested_throw(ui_state: UIState, sheet_states, throw: Throw):
+    next_sheet_states = add_new_stone(sheet_states, throw)
+    ui_state.angle_val = throw.angle_deg
+    ui_state.speed_val = throw.speed
+    ui_state.y_val = throw.y_val
+    ui_state.turn_val = throw.turn
+    return next_sheet_states
 
 
 def handle_mouse_input(
@@ -366,16 +389,23 @@ def handle_mouse_input(
         # Handle mouse button down events for UI interaction
         mx, my = event.pos
         empty_rect, preset1_rect, preset2_rect = get_preset_button_rects()
-        btn_rect, bot_btn_rect, (ax, ay, aw), (sx, sy, sw_), (yx, yy, yw), turn_rect = (
-            draw_panel(
-                screen,
-                ui_state.angle_val,
-                ui_state.speed_val,
-                ui_state.y_val,
-                ui_state.turn_val,
-                score,
-                ui_state.bot_throw,
-            )
+        (
+            btn_rect,
+            bot_btn_rect,
+            bot_nn_btn_rect,
+            (ax, ay, aw),
+            (sx, sy, sw_),
+            (yx, yy, yw),
+            turn_rect,
+        ) = draw_panel(
+            screen,
+            ui_state.angle_val,
+            ui_state.speed_val,
+            ui_state.y_val,
+            ui_state.turn_val,
+            score,
+            ui_state.bot_throw,
+            ui_state.bot_throw_nn,
         )
 
         angle_knob_x = int(
@@ -405,11 +435,14 @@ def handle_mouse_input(
             next_sheet_states = add_new_stone(next_sheet_states, throw)
         elif bot_btn_rect.collidepoint(mx, my) and ui_state.bot_throw:
             if not current_sheet_states.is_any_stone_moving():
-                next_sheet_states = add_new_stone(next_sheet_states, ui_state.bot_throw)
-                ui_state.angle_val = ui_state.bot_throw.angle_deg
-                ui_state.speed_val = ui_state.bot_throw.speed
-                ui_state.y_val = ui_state.bot_throw.y_val
-                ui_state.turn_val = ui_state.bot_throw.turn
+                next_sheet_states = _apply_suggested_throw(
+                    ui_state, next_sheet_states, ui_state.bot_throw
+                )
+        elif bot_nn_btn_rect.collidepoint(mx, my) and ui_state.bot_throw_nn:
+            if not current_sheet_states.is_any_stone_moving():
+                next_sheet_states = _apply_suggested_throw(
+                    ui_state, next_sheet_states, ui_state.bot_throw_nn
+                )
         elif empty_rect.collidepoint(mx, my):
             # Clear sheet
             next_sheet_states = empty_board(current_sheet_states.x.shape[0])
@@ -463,7 +496,7 @@ def handle_mouse_input(
     ):
         # Update slider values during drag
         mx, my = event.pos
-        _, _, (ax, ay, aw), (sx, sy, sw_), (yx, yy, yw), _ = draw_panel(
+        _, _, _, (ax, ay, aw), (sx, sy, sw_), (yx, yy, yw), _ = draw_panel(
             screen,
             ui_state.angle_val,
             ui_state.speed_val,
@@ -471,6 +504,7 @@ def handle_mouse_input(
             ui_state.turn_val,
             score,
             ui_state.bot_throw,
+            ui_state.bot_throw_nn,
         )
         if ui_state.dragging_angle:
             t = max(0.0, min(1.0, (mx - ax) / aw))
