@@ -122,6 +122,16 @@ class Throws:
     team: np.ndarray
 
 
+def concat_throws(throws_list: list[Throws]) -> Throws:
+    return Throws(
+        angle_deg=np.concatenate([t.angle_deg for t in throws_list], axis=0),
+        speed=np.concatenate([t.speed for t in throws_list], axis=0),
+        turn=np.concatenate([t.turn for t in throws_list], axis=0),
+        y_val=np.concatenate([t.y_val for t in throws_list], axis=0),
+        team=np.concatenate([t.team for t in throws_list], axis=0),
+    )
+
+
 @dataclass
 class VelocityHistories:
     v: np.ndarray  # (num_sims, num_stones, num_timesteps)
@@ -156,6 +166,19 @@ def tile_sheet_states(state: SheetStates, num_copies: int) -> SheetStates:
         velocities=Velocities(
             v=np.tile(state.velocities.v, (num_copies, 1)),
             theta=np.tile(state.velocities.theta, (num_copies, 1)),
+        ),
+    )
+
+
+def take_sheet_states(state: SheetStates, indices: np.ndarray) -> SheetStates:
+    return SheetStates(
+        first_team=state.first_team[indices],
+        x=state.x[indices],
+        y=state.y[indices],
+        rotation_directions=state.rotation_directions[indices],
+        velocities=Velocities(
+            v=state.velocities.v[indices],
+            theta=state.velocities.theta[indices],
         ),
     )
 
