@@ -6,6 +6,7 @@ import numpy as np
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 import bot
+import data_generation
 import physics
 import scoring
 from constants import center_line_y, center_of_target_house
@@ -28,7 +29,7 @@ def test_sample_throws_by_score_on_enemy_button_with_friend_in_house():
     assert board.next_team_to_play()[0] == 0
     assert np.array_equal(board.stone_teams()[0], [0, 1])
 
-    throws, states = bot.sample_throws_by_score_for_sheets(
+    throws, states = data_generation.sample_throws_by_score_for_sheets(
         sheet_states=board,
         team=0,
         throw_searcher=bot.ThrowsGridSearcher(10, 10, 4),
