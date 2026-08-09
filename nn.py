@@ -166,7 +166,6 @@ class MapTo01(Layer):
             None,
         )
 
-
 class NN:
     def __init__(self, layers: list[Layer]):
         self.layers = layers
@@ -353,3 +352,19 @@ class CrossEntropyLoss:
     def output_gradient(self, prediction, actual):
         prediction = np.clip(prediction, 1e-7, 1 - 1e-7)
         return prediction - actual  # sigmoid saturation cancels out cleanly
+
+
+def softmax(x):
+    return np.exp(x) / np.exp(x).sum(axis=1).reshape((x.shape[0], 1, 1))
+
+class SoftmaxCrossEntropyLoss:
+    # (n_batch, n_out) -> n_batch
+    def get_loss(self, prediction_logits, actual):
+        prediction = softmax(prediction_logits)
+        prediction = np.clip(prediction, 1e-7, 1 - 1e-7)
+        return -(actual * np.log(prediction)).sum(axis=1)
+
+    # (n_batch, n_out) -> (n_batch, n_out)
+    def output_gradient(self, prediction_logits, actual):
+        prediction = softmax(prediction_logits)
+        return prediction - actual

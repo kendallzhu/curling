@@ -82,7 +82,7 @@ class ValueNetwork(nn.NN):
             output_layer_size = 2 * num_stones_per_side + 1
         rng = np.random.default_rng(seed)
 
-# TODO: clarify
+        # TODO: clarify
         input_layer_size = 5 * (5 + 4) + 5
 
         l1 = nn.LinearBatched(
@@ -104,16 +104,20 @@ class ValueNetwork(nn.NN):
         act3 = nn.Max0()
 
         l4 = nn.LinearBatched(
-            1 / np.sqrt(hidden_layer_size) * rng.normal(size=(output_layer_size, hidden_layer_size))
+            1
+            / np.sqrt(hidden_layer_size)
+            * rng.normal(size=(output_layer_size, hidden_layer_size))
         )
 
         layers = [l1, act1, l2, act2, l3, act3, l4]
-        layers.append(nn.MapTo01())
+
         super().__init__(layers)
+
 
     def expected_score(self, nn_output: np.ndarray) -> np.ndarray:
         """Expected net score from categorical output nodes over [-n, n]."""
-        weights = nn_output.reshape(nn_output.shape[0], -1)
+        nn_probs = nn.softmax(nn_output)
+        weights = nn_probs.reshape(nn_output.shape[0], -1)
         score_values = np.arange(
             -self.num_stones_per_side, self.num_stones_per_side + 1
         )
