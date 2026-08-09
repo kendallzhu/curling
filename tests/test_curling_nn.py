@@ -65,14 +65,15 @@ def test_basic_score_prediction():
         train_data.input_features, train_data.answers, loss_function
     )
 
+    majority_ce = -np.log(majority_prior)
     assert train_data.normalizer is validation_data.normalizer
-    assert train_acc > majority_prior + 0.2, (
+    assert train_acc > majority_prior + 0.4, (
         f"Expected train accuracy well above majority prior {majority_prior:.3f}, "
         f"got {train_acc:.3f}"
     )
-    assert train_loss < -np.log(majority_prior), (
-        f"Expected train loss below majority-class CE {-np.log(majority_prior):.3f}, "
-        f"got {train_loss:.3f}"
+    assert train_loss < 0.75 * majority_ce, (
+        f"Expected train loss below 0.75 * majority-class CE "
+        f"({0.75 * majority_ce:.3f}), got {train_loss:.3f}"
     )
     print(f"train accuracy: {train_acc:.3f} (prior {majority_prior:.3f})")
     print(f"train loss: {train_loss:.3f}")
