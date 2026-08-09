@@ -5,53 +5,50 @@ import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
-import dataset
+import bot
 import nn
 import curling_nn
+import physics
 import presets
+import scoring
+import state
 import time
 
-# TODO: reactivate the test
-'''
+
 def test_basic_score_prediction():
     start_time = time.time()
-    num_stones_per_side = 2
+    num_stones_per_side = 5
     np.random.seed(1)
 
-    states = presets.random_sheet_states(
+    seed_states = presets.random_sheet_states(
         team1=num_stones_per_side,
-        team2=num_stones_per_side,
-        num_sims=2_000,
+        team2=num_stones_per_side - 1,
+        num_sims=100,
     )
+    throws, states = bot.RandomThrows(
+        rng=np.random.default_rng(0), n_throws_to_generate=40
+    ).get_throws_for_num_sims(team=1, sheet_states=seed_states)
+    final_states = physics.run_until_stopping(
+        sheet_states=state.add_stones_from_throws(states, throws)
+    )
+    final_scores = scoring.get_net_score_for_team(final_states, 0)
     data = curling_nn.InputFeatures.create_score_match_dataset_from_sheet_states(
-        states, num_stones_per_side
+        states, throws, final_scores, num_stones_per_side
     )
-
-    validation_states = presets.random_sheet_states(
-        team1=num_stones_per_side,
-        team2=num_stones_per_side,
-        num_sims=1000,
-    )
-    data_validation = curling_nn.InputFeatures.create_score_match_dataset_from_sheet_states(
-        validation_states, num_stones_per_side
-    )
+    train_data, validation_data = data.partition(0.2, seed=0)
 
     neural_network = curling_nn.ValueNetwork(
         seed=0,
         num_stones_per_side=num_stones_per_side,
         hidden_layer_size=20,
-        output_layer_size=2 * num_stones_per_side + 1
     )
+    loss_function = nn.SoftmaxCrossEntropyLoss()
 
-    loss_function = nn.CrossEntropyLoss()
-
-    losses = []
     num_points_per_batch = 100
-    num_iters = 10
-
+    num_iters = 15
     for i in range(num_iters):
-        lr = 1 * 0.5 * (1 + np.cos(np.pi * i / num_iters))
-        for batch in data.shuffle_batches(num_points_per_batch, seed=0):
+        lr = 0.5 * (1 + np.cos(np.pi * i / num_iters))
+        for batch in train_data.shuffle_batches(num_points_per_batch, seed=i):
             neural_network.train_batched(
                 batch,
                 loss_function,
@@ -59,21 +56,24 @@ def test_basic_score_prediction():
                 0,
             )
 
-        losses.append(
-            neural_network.get_average_loss_batched(
-                data.input_features, data.answers, loss_function
-            )
-        )
-
-    validation_pred = neural_network.run(data_validation.input_features[:, :, None])
-
-    validation_r2 = (
-        1
-        - ((data_validation.answers - validation_pred[:, :, 0]) ** 2).sum()
-        / (data_validation.answers ** 2).sum()
+    train_pred = nn.softmax(
+        neural_network.run(train_data.input_features[:, :, None])
+    )[:, :, 0]
+    train_acc = (train_pred.argmax(axis=1) == train_data.answers.argmax(axis=1)).mean()
+    majority_prior = train_data.answers.mean(axis=0).max()
+    train_loss = neural_network.get_average_loss_batched(
+        train_data.input_features, train_data.answers, loss_function
     )
 
-    print(f"validation r^2 is {validation_r2}")
-    print(f"runtime: {time.time() - start_time}")
-    assert validation_r2 >= 0.5, f"Error: validation r^2 should be at least .5 but is {validation_r2}!"
-'''
+    assert train_data.normalizer is validation_data.normalizer
+    assert train_acc > majority_prior + 0.2, (
+        f"Expected train accuracy well above majority prior {majority_prior:.3f}, "
+        f"got {train_acc:.3f}"
+    )
+    assert train_loss < -np.log(majority_prior), (
+        f"Expected train loss below majority-class CE {-np.log(majority_prior):.3f}, "
+        f"got {train_loss:.3f}"
+    )
+    print(f"train accuracy: {train_acc:.3f} (prior {majority_prior:.3f})")
+    print(f"train loss: {train_loss:.3f}")
+    print(f"runtime: {time.time() - start_time:.2f}s")
