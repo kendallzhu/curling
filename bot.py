@@ -134,6 +134,38 @@ class ThrowsGridSearcher(ThrowSearcher):
         return throws, tiled_sheet_states
 
 
+def get_most_robust_throw_with_score(
+    *,
+    state: SheetStates,
+    throws: list[Throw],
+    scores: np.ndarray,
+    target_score: float,
+    max_throws_to_evaluate: int,
+) -> tuple[Throw, float]:
+    best_throws = [
+        throw for throw, score in zip(throws, scores) if score == target_score
+    ]
+    assert (
+        len(best_throws) > 0
+    )  # if we get to min score, we should find something robust for it
+    print(
+        f"Found {len(best_throws)} throws with max score {target_score}, evaluating robustness..."
+    )
+    if len(best_throws) > max_throws_to_evaluate:
+        print(
+            f"Evaluating robustness for {max_throws_to_evaluate} randomly selected throws out of {len(best_throws)}"
+        )
+        indices = np.random.choice(
+            len(best_throws), size=max_throws_to_evaluate, replace=False
+        )
+        best_throws = [best_throws[i] for i in indices]
+
+    robust_scores = simulate_average_scores_with_noise(state, best_throws)
+    max_robust_score = np.max(robust_scores)
+    best_idx = int(np.random.choice(np.where(robust_scores == max_robust_score)[0]))
+    return best_throws[best_idx], max_robust_score
+
+
 def get_throw_grid_search(state: SheetStates, team: int) -> tuple[Throw, float, float]:
     candidate_throws = ThrowsGridSearcher(
         num_angles=20, num_speeds=20, num_y_vals=6
@@ -158,36 +190,24 @@ def get_throw_grid_search(state: SheetStates, team: int) -> tuple[Throw, float, 
     scores = scoring.get_net_score_for_team(final_state, team)  # (num_combos,)
 
     target_score = np.max(scores)
+    max_throws_to_evaluate = num_combos // 20
 
-    def get_most_robust_throw_with_score(score):
-        best_throws = [
-            throw for throw, score in zip(throws, scores) if score == target_score
-        ]
-        assert (
-            len(best_throws) > 0
-        )  # if we get to min score, we should find something robust for it
-        print(
-            f"Found {len(best_throws)} throws with max score {target_score}, evaluating robustness..."
-        )
-        max_throws_to_evaluate = num_combos // 20
-        if len(best_throws) > max_throws_to_evaluate:
-            print(
-                f"Evaluating robustness for {max_throws_to_evaluate} randomly selected throws out of {len(best_throws)}"
-            )
-            indices = np.random.choice(
-                len(best_throws), size=max_throws_to_evaluate, replace=False
-            )
-            best_throws = [best_throws[i] for i in indices]
-
-        robust_scores = simulate_average_scores_with_noise(state, best_throws)
-        max_robust_score = np.max(robust_scores)
-        best_idx = int(np.random.choice(np.where(robust_scores == max_robust_score)[0]))
-        return best_throws[best_idx], max_robust_score
-
-    best_throw, robust_score = get_most_robust_throw_with_score(target_score)
+    best_throw, robust_score = get_most_robust_throw_with_score(
+        state=state,
+        throws=throws,
+        scores=scores,
+        target_score=target_score,
+        max_throws_to_evaluate=max_throws_to_evaluate,
+    )
     while robust_score < target_score - 1:
         target_score -= 1
-        best_throw, robust_score = get_most_robust_throw_with_score(target_score)
+        best_throw, robust_score = get_most_robust_throw_with_score(
+            state=state,
+            throws=throws,
+            scores=scores,
+            target_score=target_score,
+            max_throws_to_evaluate=max_throws_to_evaluate,
+        )
     return best_throw, target_score, robust_score
 
 
