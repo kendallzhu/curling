@@ -17,3 +17,12 @@ STONE_INNER_RING_RADIUS_M = 0.0625
 ROTATION_RATE = (4 * 2 * math.pi) / 25.0  # 4 full rotations over 25m
 
 ui_sim_index = 0
+
+# Throw parameter bounds (shared by UI sliders and bot search)
+min_release_angle = -4.0
+max_release_angle = 4.0
+min_release_speed = 2.0
+max_release_speed = 2.5
+min_release_y = 2.25
+max_release_y = 2.75
+turn_options = (-1, 0, 1)

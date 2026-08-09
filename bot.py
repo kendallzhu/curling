@@ -18,6 +18,16 @@ from state import (
 
 from dataset import Normalizer
 
+from constants import (
+    min_release_angle,
+    max_release_angle,
+    min_release_speed,
+    max_release_speed,
+    min_release_y,
+    max_release_y,
+    turn_options,
+)
+
 import nn
 import scoring
 import physics
@@ -59,10 +69,9 @@ def simulate_average_scores_with_noise(
 
 
 def get_throw_grid_search(state: SheetStates, team: int) -> tuple[Throw, float, float]:
-    angle_options = np.linspace(-4, 4, 20)
-    speed_options = np.linspace(2.0, 2.5, 20)
-    turn_options = [-1, 0, 1]
-    y_options = np.linspace(2.25, 2.75, 6)
+    angle_options = np.linspace(min_release_angle, max_release_angle, 20)
+    speed_options = np.linspace(min_release_speed, max_release_speed, 20)
+    y_options = np.linspace(min_release_y, max_release_y, 6)
 
     combinations = list(
         itertools.product(angle_options, speed_options, turn_options, y_options)
@@ -132,10 +141,9 @@ class ThrowsGridSearcher(ThrowSearcher):
         self.num_y_vals = num_y_vals
 
     def get_throws(self, team: int):
-        angle_options = np.linspace(-4, 4, self.num_angles)
-        speed_options = np.linspace(2.0, 2.5, self.num_speeds)
-        turn_options = np.array([-1, 0, 1])
-        y_options = np.linspace(2.25, 2.75, self.num_y_vals)
+        angle_options = np.linspace(min_release_angle, max_release_angle, self.num_angles)
+        speed_options = np.linspace(min_release_speed, max_release_speed, self.num_speeds)
+        y_options = np.linspace(min_release_y, max_release_y, self.num_y_vals)
 
         angles, speeds, turns, ys = np.meshgrid(
             angle_options, speed_options, turn_options, y_options, indexing='ij'
@@ -151,10 +159,9 @@ class ThrowsGridSearcher(ThrowSearcher):
 
     def get_throws_for_num_sims(self, *, team: int, sheet_states: SheetStates) -> tuple[Throws, SheetStates]:
         num_sims = sheet_states.x.shape[0]
-        angle_options = np.linspace(-4, 4, self.num_angles)
-        speed_options = np.linspace(2.0, 2.5, self.num_speeds)
-        turn_options = np.array([-1, 0, 1])
-        y_options = np.linspace(2.25, 2.75, self.num_y_vals)
+        angle_options = np.linspace(min_release_angle, max_release_angle, self.num_angles)
+        speed_options = np.linspace(min_release_speed, max_release_speed, self.num_speeds)
+        y_options = np.linspace(min_release_y, max_release_y, self.num_y_vals)
 
         angles, speeds, turns, ys = np.meshgrid(
             angle_options, speed_options, turn_options, y_options, indexing='ij'
@@ -189,10 +196,18 @@ class RandomThrows(ThrowSearcher):
 
     def get_throws(self, team: int):
         return Throws(
-            angle_deg=self.rng.uniform(-4, -4, size=self.n_throws_to_generate),
-            speed=self.rng.uniform(2, 2.5, size=self.n_throws_to_generate),
-            turn=self.rng.choice([-1, 0, 1], size=self.n_throws_to_generate, replace=True),
-            y_val=self.rng.uniform(2.25, 2.75, size=self.n_throws_to_generate),
+            angle_deg=self.rng.uniform(
+                min_release_angle, max_release_angle, size=self.n_throws_to_generate
+            ),
+            speed=self.rng.uniform(
+                min_release_speed, max_release_speed, size=self.n_throws_to_generate
+            ),
+            turn=self.rng.choice(
+                turn_options, size=self.n_throws_to_generate, replace=True
+            ),
+            y_val=self.rng.uniform(
+                min_release_y, max_release_y, size=self.n_throws_to_generate
+            ),
             team=np.ones(self.n_throws_to_generate, dtype=int) * team,
         )
 
@@ -200,10 +215,14 @@ class RandomThrows(ThrowSearcher):
         num_sims = sheet_states.x.shape[0]
         total_throws = num_sims * self.n_throws_to_generate
         throws = Throws(
-            angle_deg=self.rng.uniform(-4, -4, size=total_throws),
-            speed=self.rng.uniform(2, 2.5, size=total_throws),
-            turn=self.rng.choice([-1, 0, 1], size=total_throws, replace=True),
-            y_val=self.rng.uniform(2.25, 2.75, size=total_throws),
+            angle_deg=self.rng.uniform(
+                min_release_angle, max_release_angle, size=total_throws
+            ),
+            speed=self.rng.uniform(
+                min_release_speed, max_release_speed, size=total_throws
+            ),
+            turn=self.rng.choice(turn_options, size=total_throws, replace=True),
+            y_val=self.rng.uniform(min_release_y, max_release_y, size=total_throws),
             team=np.ones(total_throws, dtype=int) * team,
         )
         tiled_sheet_states = tile_sheet_states(sheet_states, self.n_throws_to_generate)
