@@ -40,6 +40,12 @@ class TrainingData:
     normalizer: Normalizer
     raw_inputs: np.ndarray | None = None
 
+    def size(self) -> int:
+        return int(self.input_features.shape[0])
+
+    def __len__(self) -> int:
+        return self.size()
+
     @classmethod
     def spiral(
         cls,
