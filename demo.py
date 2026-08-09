@@ -4,6 +4,7 @@ import numpy as np
 import constants
 import bot
 import copy
+import curling_nn
 
 from physics import run_to_next_collision_or_stop
 from scoring import get_score
@@ -59,11 +60,14 @@ if __name__ == "__main__":
     window_height = window_width / 2 + PANEL_H
     screen = pygame.display.set_mode((window_width, window_height), pygame.RESIZABLE)
     previous_sheet_states = random_sheet_states(
-        team1=4, team2=3
+        team1=5, team2=4
     )  # guard_sheet_states()  # empty_board(1)
     timestep = 0.1
 
     ui_state = UIState()
+    value_network, value_normalizer = curling_nn.load_weights(
+        constants.value_network_weights_path
+    )
 
     next_team_to_play = 1
 
@@ -89,7 +93,7 @@ if __name__ == "__main__":
                 previous_sheet_states,
                 preset_states=(
                     demo_collisions_sheet_states,
-                    lambda: random_sheet_states(team1=4, team2=3),
+                    lambda: random_sheet_states(team1=5, team2=4),
                 ),
             )
             if (
@@ -116,10 +120,15 @@ if __name__ == "__main__":
             )
             ui_state.bot_throw = bot_throw
 
-            bot_throw_nn = bot.get_throw_nn_argmax(
-                next_sheet_states, next_team_to_play
+            bot_throw_nn, bot_nn_expected_score = bot.get_throw_nn_argmax(
+                next_sheet_states,
+                next_team_to_play,
+                neural_network=value_network,
+                normalizer=value_normalizer,
             )
             print("Bot NN chosen throw:", bot_throw_nn)
+            if bot_nn_expected_score is not None:
+                print(f"Bot NN expected score: {bot_nn_expected_score}")
             ui_state.bot_throw_nn = bot_throw_nn
 
         pygame.display.flip()

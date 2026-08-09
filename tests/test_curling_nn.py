@@ -6,6 +6,7 @@ import numpy as np
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 import bot
+import dataset
 import nn
 import curling_nn
 import physics
@@ -78,3 +79,28 @@ def test_basic_score_prediction():
     print(f"train accuracy: {train_acc:.3f} (prior {majority_prior:.3f})")
     print(f"train loss: {train_loss:.3f}")
     print(f"runtime: {time.time() - start_time:.2f}s")
+
+
+def test_write_and_load_weights(tmp_path):
+    num_stones = 9
+    neural_network = curling_nn.ValueNetwork(
+        seed=1, num_stones=num_stones, hidden_layer_size=8
+    )
+    feature_dim = 5 * num_stones + 7
+    normalizer = dataset.Normalizer(
+        feature_means=np.arange(feature_dim, dtype=float),
+        feature_stdevs=np.linspace(0.5, 1.5, feature_dim),
+    )
+    path = tmp_path / "weights.npz"
+    curling_nn.write_weights(path, neural_network, normalizer)
+    loaded_nn, loaded_norm = curling_nn.load_weights(path)
+
+    assert loaded_nn.num_stones == num_stones
+    assert loaded_nn.hidden_layer_size == 8
+    for original, loaded in zip(
+        neural_network.linear_layers(), loaded_nn.linear_layers()
+    ):
+        np.testing.assert_allclose(original.weights, loaded.weights)
+        np.testing.assert_allclose(original.bias, loaded.bias)
+    np.testing.assert_allclose(loaded_norm.feature_means, normalizer.feature_means)
+    np.testing.assert_allclose(loaded_norm.feature_stdevs, normalizer.feature_stdevs)
