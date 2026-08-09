@@ -3,13 +3,14 @@ import numpy as np
 import nn
 import dataset
 import state
-import scoring
 from constants import house_outer_circle_radius, STONE_RADIUS_M
 
 
 class InputFeatures:
     @staticmethod
-    def create_of_sheet_states(sheet_states: state.SheetStates, throws: state.Throws) -> np.ndarray:
+    def raw_of_sheet_states(
+        sheet_states: state.SheetStates, throws: state.Throws
+    ) -> np.ndarray:
         is_thrown = np.where(sheet_states.x == 0, 0, 1)
         distance_from_center = sheet_states.distance_from_center_of_house()
         is_in_house = np.where(
@@ -18,8 +19,8 @@ class InputFeatures:
             0,
         )
         next_team_to_play = sheet_states.next_team_to_play()
-        assert((throws.team == next_team_to_play).all())
-        raw_features = np.concatenate(
+        assert (throws.team == next_team_to_play).all()
+        return np.concatenate(
             [
                 sheet_states.first_team.reshape((sheet_states.x.shape[0], 1)),
                 is_thrown,
@@ -34,8 +35,16 @@ class InputFeatures:
             ],
             axis=1,
         )
-        normalizer = dataset.Normalizer.from_features(raw_features)
-        return normalizer.normalize(raw_features)
+
+    @staticmethod
+    def create_of_sheet_states(
+        sheet_states: state.SheetStates,
+        throws: state.Throws,
+        normalizer: dataset.Normalizer,
+    ) -> np.ndarray:
+        return normalizer.normalize(
+            InputFeatures.raw_of_sheet_states(sheet_states, throws)
+        )
 
     @staticmethod
     def create_score_match_dataset_from_sheet_states(
@@ -50,7 +59,7 @@ class InputFeatures:
                 -num_stones_per_side, num_stones_per_side + 1, dtype=int
             ).reshape((1, 2 * num_stones_per_side + 1))
         ).astype(int)
-        raw_features = InputFeatures.create_of_sheet_states(sheet_states, throws)
+        raw_features = InputFeatures.raw_of_sheet_states(sheet_states, throws)
         normalizer = dataset.Normalizer.from_features(raw_features)
         return dataset.TrainingData(
             input_features=normalizer.normalize(raw_features),
@@ -66,8 +75,11 @@ class ValueNetwork(nn.NN):
         seed: int,
         num_stones_per_side: int,
         hidden_layer_size: int = 20,
-        output_layer_size: int = 11
+        output_layer_size: int | None = None,
     ):
+        self.num_stones_per_side = num_stones_per_side
+        if output_layer_size is None:
+            output_layer_size = 2 * num_stones_per_side + 1
         rng = np.random.default_rng(seed)
 
 # TODO: clarify
@@ -98,3 +110,12 @@ class ValueNetwork(nn.NN):
         layers = [l1, act1, l2, act2, l3, act3, l4]
         layers.append(nn.MapTo01())
         super().__init__(layers)
+
+    def expected_score(self, nn_output: np.ndarray) -> np.ndarray:
+        """Expected net score from categorical output nodes over [-n, n]."""
+        weights = nn_output.reshape(nn_output.shape[0], -1)
+        score_values = np.arange(
+            -self.num_stones_per_side, self.num_stones_per_side + 1
+        )
+        assert weights.shape[1] == score_values.shape[0]
+        return weights @ score_values
