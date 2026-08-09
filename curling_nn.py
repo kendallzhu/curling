@@ -20,18 +20,21 @@ class InputFeatures:
         )
         next_team_to_play = sheet_states.next_team_to_play()
         assert (throws.team == next_team_to_play).all()
+        num_sims = sheet_states.x.shape[0]
         return np.concatenate(
             [
-                sheet_states.first_team.reshape((sheet_states.x.shape[0], 1)),
+                sheet_states.first_team.reshape((num_sims, 1)),
                 is_thrown,
                 sheet_states.x,
                 sheet_states.y,
                 distance_from_center,
                 is_in_house,
-                throws.angle_deg.reshape((sheet_states.x.shape[0], 1)),
-                throws.speed.reshape((sheet_states.x.shape[0], 1)),
-                throws.turn.reshape((sheet_states.x.shape[0], 1)),
-                throws.y_val.reshape((sheet_states.x.shape[0], 1)),
+                throws.angle_deg.reshape((num_sims, 1)),
+                throws.speed.reshape((num_sims, 1)),
+                throws.y_val.reshape((num_sims, 1)),
+                np.where(throws.turn == 1, 1, 0).reshape((num_sims, 1)),
+                np.where(throws.turn == 0, 1, 0).reshape((num_sims, 1)),
+                np.where(throws.turn == -1, 1, 0).reshape((num_sims, 1)),
             ],
             axis=1,
         )
@@ -73,17 +76,17 @@ class ValueNetwork(nn.NN):
     def __init__(
         self,
         seed: int,
-        num_stones_per_side: int,
+        num_stones: int,
         hidden_layer_size: int = 20,
         output_layer_size: int | None = None,
     ):
-        self.num_stones_per_side = num_stones_per_side
+        self.num_stones_per_side = ((num_stones + 1) // 2)
         if output_layer_size is None:
-            output_layer_size = 2 * num_stones_per_side + 1
+            output_layer_size = 2 * self.num_stones_per_side + 1
         rng = np.random.default_rng(seed)
 
         # TODO: clarify
-        input_layer_size = 5 * (5 + 4) + 5
+        input_layer_size = 5 * num_stones + 7
 
         l1 = nn.LinearBatched(
             rng.normal(size=(hidden_layer_size, input_layer_size))
