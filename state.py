@@ -40,8 +40,17 @@ class SheetStates:
     def num_stones(self, of_team): # (num_sims)
         return np.sum(self.stone_teams() == of_team, axis=1)
 
-    def team_with_fewer_stones(self): # (num_sims)
-        return np.where(self.num_stones(0) < self.num_stones(1), 0, 1)
+    # Assumes alternating throws
+    def next_team_to_play(self):
+        if (self.x.shape[1]% 2) == 0:
+            return self.first_team
+        else:
+            return 1-self.first_team
+
+    def team_with_fewer_stones(self):
+        first_team = self.first_team
+        second_team = 1 - first_team
+        return np.where(self.num_stones(second_team) < self.num_stones(first_team), second_team, first_team)
 
     def stone_teams(self): # (num_sims, num_stones)
         num_sims, num_stones = self.x.shape

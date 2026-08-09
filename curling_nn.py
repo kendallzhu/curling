@@ -9,7 +9,7 @@ from constants import house_outer_circle_radius, STONE_RADIUS_M
 
 class InputFeatures:
     @staticmethod
-    def create_of_sheet_states(sheet_states: state.SheetStates) -> np.ndarray:
+    def create_of_sheet_states(sheet_states: state.SheetStates, throws: state.Throws) -> np.ndarray:
         is_thrown = np.where(sheet_states.x == 0, 0, 1)
         distance_from_center = sheet_states.distance_from_center_of_house()
         is_in_house = np.where(
@@ -17,6 +17,8 @@ class InputFeatures:
             1,
             0,
         )
+        next_team_to_play = sheet_states.next_team_to_play()
+        assert((throws.team == next_team_to_play).all())
         raw_features = np.concatenate(
             [
                 sheet_states.first_team.reshape((sheet_states.x.shape[0], 1)),
@@ -25,6 +27,10 @@ class InputFeatures:
                 sheet_states.y,
                 distance_from_center,
                 is_in_house,
+                throws.angle_deg.reshape((sheet_states.x.shape[0], 1)),
+                throws.speed.reshape((sheet_states.x.shape[0], 1)),
+                throws.turn.reshape((sheet_states.x.shape[0], 1)),
+                throws.y_val.reshape((sheet_states.x.shape[0], 1)),
             ],
             axis=1,
         )
@@ -34,16 +40,17 @@ class InputFeatures:
     @staticmethod
     def create_score_match_dataset_from_sheet_states(
         sheet_states: state.SheetStates,
+        throws: state.Throws,
+        final_scores: np.ndarray,
         num_stones_per_side: int,
     ) -> dataset.TrainingData:
-        score = scoring.get_net_score_for_team(sheet_states, 0)
         score_matches = (
-            score.reshape((sheet_states.x.shape[0], 1))
+            final_scores.reshape((sheet_states.x.shape[0], 1))
             == np.arange(
                 -num_stones_per_side, num_stones_per_side + 1, dtype=int
             ).reshape((1, 2 * num_stones_per_side + 1))
         ).astype(int)
-        raw_features = InputFeatures.create_of_sheet_states(sheet_states)
+        raw_features = InputFeatures.create_of_sheet_states(sheet_states, throws)
         normalizer = dataset.Normalizer.from_features(raw_features)
         return dataset.TrainingData(
             input_features=normalizer.normalize(raw_features),
@@ -63,7 +70,8 @@ class ValueNetwork(nn.NN):
     ):
         rng = np.random.default_rng(seed)
 
-        input_layer_size = 5 * 2 * num_stones_per_side + 1
+# TODO: clarify
+        input_layer_size = 5 * (5 + 4) + 5
 
         l1 = nn.LinearBatched(
             rng.normal(size=(hidden_layer_size, input_layer_size))
