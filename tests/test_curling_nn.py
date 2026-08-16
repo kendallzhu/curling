@@ -33,12 +33,12 @@ def test_basic_score_prediction():
         sheet_states=state.add_stones_from_throws(states, throws)
     )
     final_scores = scoring.get_net_score_for_team(final_states, 0)
-    data = curling_nn.InputFeatures.create_score_match_dataset_from_sheet_states(
+    data = curling_nn.QInputFeatures.create_score_match_dataset_from_sheet_states(
         states, throws, final_scores, num_stones_per_side
     )
     train_data, validation_data = data.partition(0.2, seed=0)
 
-    neural_network = curling_nn.ValueNetwork(
+    neural_network = curling_nn.QNetwork(
         seed=0,
         num_stones=2*num_stones_per_side - 1,
         hidden_layer_size=20,
@@ -81,9 +81,9 @@ def test_basic_score_prediction():
     print(f"runtime: {time.time() - start_time:.2f}s")
 
 
-def test_write_and_load_weights(tmp_path):
+def test_write_and_load_q_weights(tmp_path):
     num_stones = 9
-    neural_network = curling_nn.ValueNetwork(
+    neural_network = curling_nn.QNetwork(
         seed=1, num_stones=num_stones, hidden_layer_size=8
     )
     feature_dim = 5 * num_stones + 7
@@ -92,8 +92,8 @@ def test_write_and_load_weights(tmp_path):
         feature_stdevs=np.linspace(0.5, 1.5, feature_dim),
     )
     path = tmp_path / "weights.npz"
-    curling_nn.write_weights(path, neural_network, normalizer)
-    loaded_nn, loaded_norm = curling_nn.load_weights(path)
+    curling_nn.write_q_weights(path, neural_network, normalizer)
+    loaded_nn, loaded_norm = curling_nn.load_q_weights(path)
 
     assert loaded_nn.num_stones == num_stones
     assert loaded_nn.hidden_layer_size == 8
