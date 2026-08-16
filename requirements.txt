@@ -31,6 +31,7 @@ packaging==26.2
 parso==0.8.6
 pexpect==4.9.0
 pillow==12.2.0
+polars==1.43.2
 platformdirs==4.9.6
 pluggy==1.6.0
 pre_commit==4.6.0
