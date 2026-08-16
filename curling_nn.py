@@ -10,29 +10,59 @@ import state
 from constants import house_outer_circle_radius, STONE_RADIUS_M
 
 
+def raw_sheet_state_features(sheet_states: state.SheetStates) -> np.ndarray:
+    is_thrown = np.where(sheet_states.x == 0, 0, 1)
+    distance_from_center = sheet_states.distance_from_center_of_house()
+    is_in_house = np.where(
+        distance_from_center < house_outer_circle_radius + STONE_RADIUS_M,
+        1,
+        0,
+    )
+    num_sims = sheet_states.x.shape[0]
+    return np.concatenate(
+        [
+            sheet_states.first_team.reshape((num_sims, 1)),
+            is_thrown,
+            sheet_states.x,
+            sheet_states.y,
+            distance_from_center,
+            is_in_house,
+        ],
+        axis=1,
+    )
+
+
+def _score_match_dataset(
+    raw_features: np.ndarray,
+    final_scores: np.ndarray,
+    num_stones_per_side: int,
+) -> dataset.TrainingData:
+    score_matches = (
+        final_scores.reshape((raw_features.shape[0], 1))
+        == np.arange(
+            -num_stones_per_side, num_stones_per_side + 1, dtype=int
+        ).reshape((1, 2 * num_stones_per_side + 1))
+    ).astype(int)
+    normalizer = dataset.Normalizer.from_features(raw_features)
+    return dataset.TrainingData(
+        input_features=normalizer.normalize(raw_features),
+        answers=score_matches,
+        normalizer=normalizer,
+        raw_inputs=raw_features,
+    )
+
+
 class QInputFeatures:
     @staticmethod
     def raw_of_sheet_states(
         sheet_states: state.SheetStates, throws: state.Throws
     ) -> np.ndarray:
-        is_thrown = np.where(sheet_states.x == 0, 0, 1)
-        distance_from_center = sheet_states.distance_from_center_of_house()
-        is_in_house = np.where(
-            distance_from_center < house_outer_circle_radius + STONE_RADIUS_M,
-            1,
-            0,
-        )
         next_team_to_play = sheet_states.next_team_to_play()
         assert (throws.team == next_team_to_play).all()
         num_sims = sheet_states.x.shape[0]
         return np.concatenate(
             [
-                sheet_states.first_team.reshape((num_sims, 1)),
-                is_thrown,
-                sheet_states.x,
-                sheet_states.y,
-                distance_from_center,
-                is_in_house,
+                raw_sheet_state_features(sheet_states),
                 throws.angle_deg.reshape((num_sims, 1)),
                 throws.speed.reshape((num_sims, 1)),
                 throws.y_val.reshape((num_sims, 1)),
@@ -60,19 +90,28 @@ class QInputFeatures:
         final_scores: np.ndarray,
         num_stones_per_side: int,
     ) -> dataset.TrainingData:
-        score_matches = (
-            final_scores.reshape((sheet_states.x.shape[0], 1))
-            == np.arange(
-                -num_stones_per_side, num_stones_per_side + 1, dtype=int
-            ).reshape((1, 2 * num_stones_per_side + 1))
-        ).astype(int)
-        raw_features = QInputFeatures.raw_of_sheet_states(sheet_states, throws)
-        normalizer = dataset.Normalizer.from_features(raw_features)
-        return dataset.TrainingData(
-            input_features=normalizer.normalize(raw_features),
-            answers=score_matches,
-            normalizer=normalizer,
-            raw_inputs=raw_features,
+        return _score_match_dataset(
+            QInputFeatures.raw_of_sheet_states(sheet_states, throws),
+            final_scores,
+            num_stones_per_side,
+        )
+
+
+class VInputFeatures:
+    @staticmethod
+    def raw_of_sheet_states(sheet_states: state.SheetStates) -> np.ndarray:
+        return raw_sheet_state_features(sheet_states)
+
+    @staticmethod
+    def create_score_match_dataset_from_sheet_states(
+        sheet_states: state.SheetStates,
+        final_scores: np.ndarray,
+        num_stones_per_side: int,
+    ) -> dataset.TrainingData:
+        return _score_match_dataset(
+            VInputFeatures.raw_of_sheet_states(sheet_states),
+            final_scores,
+            num_stones_per_side,
         )
 
 
