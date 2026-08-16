@@ -230,6 +230,8 @@ def _write_score_weights(
     neural_network: ScoreNetwork,
     normalizer: dataset.Normalizer,
 ) -> None:
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
     arrays: dict[str, Any] = {
         "num_stones": np.asarray(neural_network.num_stones),
         "hidden_layer_size": np.asarray(neural_network.hidden_layer_size),

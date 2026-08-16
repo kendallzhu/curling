@@ -14,7 +14,7 @@ Vectorized curling simulation with Numba physics, actual scoring, grid-search an
 ### State, physics, and scoring
 
 - `state.py` – Vectorized data structures: `SheetStates`, `SheetState`, `StoneState`, `Throws`, `Throw`, and `Velocities`. Core operations include `empty_board`, `tile_sheet_states`, `take_sheet_states`, `add_new_stone(s)`, `add_stones_from_throws`, and `concat`.
-- `constants.py` – Sheet geometry, physical constants, throw bounds, turn options, and `q_network_weights_path`.
+- `constants.py` – Sheet geometry, physical constants, throw bounds, turn options, and default paths under `weights/` and `datasets/`.
 - `physics.py` – Backend facade. The default backend is `physics_numba`; the pure-NumPy reference backend is `scratch.physics_numpy` and is exposed as `run_until_stopping_np` and `run_to_next_collision_or_stop_np`.
 - `physics_numba.py` – Numba collision and motion simulation: `run_to_next_collision_or_stop`, `run_until_stopping`, `apply_collision`, and overlap separation.
 - `scratch/physics_numpy.py` – Slower readable reference implementation; not part of the main runtime path.
@@ -46,9 +46,10 @@ Vectorized curling simulation with Numba physics, actual scoring, grid-search an
   - `QInputFeatures` converts sheet/throw pairs into normalized model features.
   - `QNetwork` predicts a categorical net-score distribution and provides `expected_score`.
   - `load_q_weights` and `write_q_weights` handle model weights plus the feature normalizer.
-- `dataset.py` – `Normalizer`, `TrainingData`, batching, partitioning, and the spiral example dataset.
+- `dataset.py` – `Normalizer`, `TrainingData`, batching, partitioning, the spiral example dataset, and `write_training_data` / `load_training_data`.
 - `training.ipynb` – Current training/exploration notebook.
-- `q_network_weights.npz` – Checked-in saved Q-network weights and normalizer data.
+- `weights/` – Checked-in saved Q and value network weights plus normalizers.
+- `datasets/` – Checked-in serialized training datasets (`write_training_data` / `load_training_data`).
 - `scratch/nn_scratch_old.ipynb` – Older neural-network scratch notebook.
 
 ### Demo and UI

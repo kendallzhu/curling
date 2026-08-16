@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
+
 import numpy as np
 from matplotlib import pyplot as plt
 
@@ -174,3 +177,33 @@ class TrainingData:
             s=size,
         )
         return ax
+
+
+def write_training_data(path: str | Path, data: TrainingData) -> None:
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    arrays: dict[str, Any] = {
+        "input_features": data.input_features,
+        "answers": data.answers,
+        "feature_means": data.normalizer.feature_means,
+        "feature_stdevs": data.normalizer.feature_stdevs,
+    }
+    if data.raw_inputs is not None:
+        arrays["raw_inputs"] = data.raw_inputs
+    np.savez(path, **arrays)
+
+
+def load_training_data(path: str | Path) -> TrainingData:
+    with np.load(path) as npz:
+        raw_inputs = (
+            np.array(npz["raw_inputs"], copy=True) if "raw_inputs" in npz.files else None
+        )
+        return TrainingData(
+            input_features=np.array(npz["input_features"], copy=True),
+            answers=np.array(npz["answers"], copy=True),
+            normalizer=Normalizer(
+                feature_means=np.array(npz["feature_means"], copy=True),
+                feature_stdevs=np.array(npz["feature_stdevs"], copy=True),
+            ),
+            raw_inputs=raw_inputs,
+        )
