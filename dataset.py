@@ -183,14 +183,15 @@ def write_training_data(path: str | Path, data: TrainingData) -> None:
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     arrays: dict[str, Any] = {
-        "input_features": data.input_features,
         "answers": data.answers,
         "feature_means": data.normalizer.feature_means,
         "feature_stdevs": data.normalizer.feature_stdevs,
     }
     if data.raw_inputs is not None:
         arrays["raw_inputs"] = data.raw_inputs
-    np.savez(path, **arrays)
+    else:
+        arrays["input_features"] = data.input_features
+    np.savez_compressed(path, **arrays)
 
 
 def load_training_data(path: str | Path) -> TrainingData:
@@ -198,12 +199,17 @@ def load_training_data(path: str | Path) -> TrainingData:
         raw_inputs = (
             np.array(npz["raw_inputs"], copy=True) if "raw_inputs" in npz.files else None
         )
+        normalizer = Normalizer(
+            feature_means=np.array(npz["feature_means"], copy=True),
+            feature_stdevs=np.array(npz["feature_stdevs"], copy=True),
+        )
+        if raw_inputs is not None:
+            input_features = normalizer.normalize(raw_inputs)
+        else:
+            input_features = np.array(npz["input_features"], copy=True)
         return TrainingData(
-            input_features=np.array(npz["input_features"], copy=True),
+            input_features=input_features,
             answers=np.array(npz["answers"], copy=True),
-            normalizer=Normalizer(
-                feature_means=np.array(npz["feature_means"], copy=True),
-                feature_stdevs=np.array(npz["feature_stdevs"], copy=True),
-            ),
+            normalizer=normalizer,
             raw_inputs=raw_inputs,
         )
