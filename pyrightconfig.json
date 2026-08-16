@@ -1,4 +1,7 @@
 {
   "typeCheckingMode": "basic",
-    "reportUnusedVariable": "warning"
+  "reportUnusedVariable": "warning",
+  "venvPath": ".",
+  "venv": "venv",
+  "extraPaths": ["."]
 }

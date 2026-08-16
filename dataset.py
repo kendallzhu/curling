@@ -1,15 +1,13 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 import numpy as np
 from matplotlib import pyplot as plt
-
-import state
-import presets
-import scoring
 
 
 @dataclass(frozen=True)
@@ -41,7 +39,7 @@ class TrainingData:
     input_features: np.ndarray
     answers: np.ndarray
     normalizer: Normalizer
-    raw_inputs: np.ndarray | None = None
+    raw_inputs: np.ndarray
 
     def size(self) -> int:
         return int(self.input_features.shape[0])
@@ -107,39 +105,22 @@ class TrainingData:
         indices = rng.permutation(n)
         val_idx = indices[:n_val]
         train_idx = indices[n_val:]
-
-        if self.raw_inputs is not None:
-            train_raw = self.raw_inputs[train_idx]
-            val_raw = self.raw_inputs[val_idx]
-            normalizer = Normalizer.from_features(train_raw)
-            train = TrainingData(
-                input_features=normalizer.normalize(train_raw),
-                answers=self.answers[train_idx],
-                normalizer=normalizer,
-                raw_inputs=train_raw,
-            )
-            validation = TrainingData(
-                input_features=normalizer.normalize(val_raw),
-                answers=self.answers[val_idx],
-                normalizer=normalizer,
-                raw_inputs=val_raw,
-            )
-            return train, validation
-
-        return (
-            TrainingData(
-                input_features=self.input_features[train_idx],
-                answers=self.answers[train_idx],
-                normalizer=self.normalizer,
-                raw_inputs=None,
-            ),
-            TrainingData(
-                input_features=self.input_features[val_idx],
-                answers=self.answers[val_idx],
-                normalizer=self.normalizer,
-                raw_inputs=None,
-            ),
+        train_raw = self.raw_inputs[train_idx]
+        val_raw = self.raw_inputs[val_idx]
+        normalizer = Normalizer.from_features(train_raw)
+        train = TrainingData(
+            input_features=normalizer.normalize(train_raw),
+            answers=self.answers[train_idx],
+            normalizer=normalizer,
+            raw_inputs=train_raw,
         )
+        validation = TrainingData(
+            input_features=normalizer.normalize(val_raw),
+            answers=self.answers[val_idx],
+            normalizer=normalizer,
+            raw_inputs=val_raw,
+        )
+        return train, validation
 
     def shuffle_batches(
         self,
@@ -186,30 +167,78 @@ def write_training_data(path: str | Path, data: TrainingData) -> None:
         "answers": data.answers,
         "feature_means": data.normalizer.feature_means,
         "feature_stdevs": data.normalizer.feature_stdevs,
+        "raw_inputs": data.raw_inputs,
     }
-    if data.raw_inputs is not None:
-        arrays["raw_inputs"] = data.raw_inputs
-    else:
-        arrays["input_features"] = data.input_features
     np.savez_compressed(path, **arrays)
 
 
 def load_training_data(path: str | Path) -> TrainingData:
     with np.load(path) as npz:
-        raw_inputs = (
-            np.array(npz["raw_inputs"], copy=True) if "raw_inputs" in npz.files else None
-        )
+        raw_inputs = np.array(npz["raw_inputs"], copy=True)
         normalizer = Normalizer(
             feature_means=np.array(npz["feature_means"], copy=True),
             feature_stdevs=np.array(npz["feature_stdevs"], copy=True),
         )
-        if raw_inputs is not None:
-            input_features = normalizer.normalize(raw_inputs)
-        else:
-            input_features = np.array(npz["input_features"], copy=True)
         return TrainingData(
-            input_features=input_features,
+            input_features=normalizer.normalize(raw_inputs),
             answers=np.array(npz["answers"], copy=True),
             normalizer=normalizer,
             raw_inputs=raw_inputs,
         )
+
+
+def combine_training_data(*shards: TrainingData) -> TrainingData:
+    if not shards:
+        raise ValueError("need at least one shard")
+    raw_inputs = np.concatenate([shard.raw_inputs for shard in shards], axis=0)
+    answers = np.concatenate([shard.answers for shard in shards], axis=0)
+    normalizer = Normalizer.from_features(raw_inputs)
+    return TrainingData(
+        input_features=normalizer.normalize(raw_inputs),
+        answers=answers,
+        normalizer=normalizer,
+        raw_inputs=raw_inputs,
+    )
+
+
+def write_training_data_shard(
+    directory: str | Path,
+    data: TrainingData,
+    *,
+    seed: int | None = None,
+    name: str | None = None,
+) -> Path:
+    directory = Path(directory)
+    directory.mkdir(parents=True, exist_ok=True)
+    if name is None:
+        stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        name = f"{stamp}_seed{seed}.npz" if seed is not None else f"{stamp}.npz"
+    elif not name.endswith(".npz"):
+        name = f"{name}.npz"
+    path = directory / name
+    if path.exists():
+        raise FileExistsError(path)
+    write_training_data(path, data)
+    return path
+
+
+def load_training_data_dir(
+    directory: str | Path,
+    names: str | Sequence[str] | None = None,
+) -> TrainingData:
+    directory = Path(directory)
+    if names is None:
+        paths = sorted(directory.glob("*.npz"))
+    else:
+        name_list = (names,) if isinstance(names, str) else names
+        paths = []
+        for name in name_list:
+            path = Path(name)
+            if path.suffix != ".npz":
+                path = path.with_suffix(".npz")
+            if not path.is_absolute():
+                path = directory / path
+            paths.append(path)
+    if not paths:
+        raise FileNotFoundError(f"no .npz shards in {directory}")
+    return combine_training_data(*(load_training_data(path) for path in paths))
