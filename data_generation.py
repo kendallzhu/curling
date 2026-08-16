@@ -7,9 +7,12 @@ import curling_nn
 import nn
 import physics
 import scoring
-from dataset import Normalizer
+from dataset import Normalizer, TrainingData
 from bot import (
+    ArgmaxThrowPolicy,
+    RandomThrows,
     ThrowSearcher,
+    ThrowsGridSearcher,
     add_noise_to_throw,
     score_throws_by_net_score,
 )
@@ -357,3 +360,106 @@ def combine_throw_datasets(
     throws_list = [throws for throws, _ in datasets]
     states_list = [states for _, states in datasets]
     return state.concat_throws(throws_list), state.concat(states_list)
+
+
+def _sampled_throws_and_states(
+    *,
+    sheet_states: state.SheetStates,
+    team: int,
+    rng: np.random.Generator,
+    n_random_throws: int,
+    n_per_score: int,
+) -> tuple[state.Throws, state.SheetStates]:
+    if n_random_throws < 0:
+        raise ValueError(f"n_random_throws must be >= 0, got {n_random_throws}")
+    if n_per_score < 0:
+        raise ValueError(f"n_per_score must be >= 0, got {n_per_score}")
+    if n_random_throws == 0 and n_per_score == 0:
+        raise ValueError("need n_random_throws > 0 and/or n_per_score > 0")
+
+    parts: list[tuple[state.Throws, state.SheetStates]] = []
+    if n_random_throws > 0:
+        parts.append(
+            RandomThrows(
+                rng=rng, n_throws_to_generate=n_random_throws
+            ).get_throws_for_num_sims(team=team, sheet_states=sheet_states)
+        )
+    if n_per_score > 0:
+        parts.append(
+            sample_throws_by_score_for_sheets(
+                sheet_states=sheet_states,
+                team=team,
+                throw_searcher=ThrowsGridSearcher(10, 10, 4),
+                n_per_score=n_per_score,
+                rng=rng,
+            )
+        )
+    return combine_throw_datasets(*parts)
+
+
+def _grid_search_throws(
+    sheet_states: state.SheetStates,
+    team: int,
+    rng: np.random.Generator,
+) -> state.Throws:
+    return ArgmaxThrowPolicy.max_single_turn_score(
+        random_action_prob=0.0,
+        throw_searcher=ThrowsGridSearcher(10, 10, 4),
+    ).make_throws(sheet_states, team, rng)
+
+
+def q_network_training_data(
+    *,
+    sheet_states: state.SheetStates,
+    team: int,
+    rng: np.random.Generator,
+    n_random_throws: int,
+    n_per_score: int,
+    num_stones_per_side: int | None = None,
+) -> TrainingData:
+    """Build a Q-network score-match dataset from random and/or score-stratified throws."""
+    throws, states = _sampled_throws_and_states(
+        sheet_states=sheet_states,
+        team=team,
+        rng=rng,
+        n_random_throws=n_random_throws,
+        n_per_score=n_per_score,
+    )
+    final_states = physics.run_until_stopping(
+        sheet_states=state.add_stones_from_throws(states, throws)
+    )
+    final_scores = scoring.get_net_score_for_team(final_states, 0)
+    if num_stones_per_side is None:
+        num_stones_per_side = (sheet_states.x.shape[1] + 1) // 2
+    return curling_nn.QInputFeatures.create_score_match_dataset_from_sheet_states(
+        states, throws, final_scores, num_stones_per_side
+    )
+
+
+def value_network_training_data(
+    *,
+    sheet_states: state.SheetStates,
+    team: int,
+    rng: np.random.Generator,
+    num_stones_per_side: int | None = None,
+) -> TrainingData:
+    """Build a V-network dataset for second-to-last-turn sheets.
+
+    Features are the input sheet (positions only). The current team grid-searches
+    the second-to-last throw, then the opponent grid-searches the last throw.
+    Labels are team-0 net score after that last throw.
+    """
+    second_to_last_throws = _grid_search_throws(sheet_states, team, rng)
+    after_second_to_last = physics.run_until_stopping(
+        sheet_states=state.add_stones_from_throws(sheet_states, second_to_last_throws)
+    )
+    last_throws = _grid_search_throws(after_second_to_last, 1 - team, rng)
+    final_states = physics.run_until_stopping(
+        sheet_states=state.add_stones_from_throws(after_second_to_last, last_throws)
+    )
+    final_scores = scoring.get_net_score_for_team(final_states, 0)
+    if num_stones_per_side is None:
+        num_stones_per_side = (sheet_states.x.shape[1] + 3) // 2
+    return curling_nn.VInputFeatures.create_score_match_dataset_from_sheet_states(
+        sheet_states, final_scores, num_stones_per_side
+    )
