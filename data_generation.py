@@ -397,15 +397,33 @@ def _sampled_throws_and_states(
     return combine_throw_datasets(*parts)
 
 
+# 10×10×4×3 = 1200 candidates per sheet. Keep this small so tiled physics
+# (candidates × sheets) cannot allocate multi-GB collision-time matrices.
+_GRID_SEARCH_SHEET_BATCH = 32
+
+
 def _grid_search_throws(
     sheet_states: state.SheetStates,
     team: int,
     rng: np.random.Generator,
+    sheet_batch_size: int = _GRID_SEARCH_SHEET_BATCH,
 ) -> state.Throws:
-    return ArgmaxThrowPolicy.max_single_turn_score(
+    policy = ArgmaxThrowPolicy.max_single_turn_score(
         random_action_prob=0.0,
         throw_searcher=ThrowsGridSearcher(10, 10, 4),
-    ).make_throws(sheet_states, team, rng)
+    )
+    n = sheet_states.x.shape[0]
+    if n <= sheet_batch_size:
+        return policy.make_throws(sheet_states, team, rng)
+    parts: list[state.Throws] = []
+    for start in range(0, n, sheet_batch_size):
+        idx = np.arange(start, min(start + sheet_batch_size, n))
+        parts.append(
+            policy.make_throws(
+                state.take_sheet_states(sheet_states, idx), team, rng
+            )
+        )
+    return state.concat_throws(parts)
 
 
 def q_network_training_data(
