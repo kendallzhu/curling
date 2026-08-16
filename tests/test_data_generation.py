@@ -47,17 +47,15 @@ def test_q_network_training_data_random_throws_only():
 
 
 def test_value_network_training_data_labels_final_score():
-    sheet_states = random_sheet_states(team1=1, team2=1, num_sims=2)
-    assert np.all(sheet_states.next_team_to_play() == 0)
+    sheet_states = random_sheet_states(team1=1, team2=0, num_sims=2)
+    assert np.all(sheet_states.next_team_to_play() == 1)
     data = value_network_training_data(
         sheet_states=sheet_states,
-        team=0,
+        team=1,
         rng=np.random.default_rng(0),
     )
     assert data.size() == 2
-    assert data.raw_inputs is not None
-    # Features are the input 2-stone sheets, no throw channels.
-    assert data.raw_inputs.shape == (2, 5 * 2 + 1)
-    # End has 4 stones, so scores are in [-2, 2].
-    assert data.answers.shape == (2, 5)
+    assert data.raw_inputs.shape == (2, 5 * 1 + 1)
+    # One throw left; end has 2 stones, scores in [-1, 1].
+    assert data.answers.shape == (2, 3)
     np.testing.assert_array_equal(data.answers.sum(axis=1), 1)
