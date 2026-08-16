@@ -1,6 +1,7 @@
 import numpy as np
 import time
-import physics_numba, physics_numpy
+import physics_numba
+from scratch import physics_numpy
 from state import empty_board, add_new_stone_raw
 
 num_stones = 16
