@@ -6,7 +6,11 @@ import numpy as np
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from constants import center_of_target_house
-from data_generation import q_network_training_data, random_sheet_states
+from data_generation import (
+    q_network_training_data,
+    random_sheet_states,
+    value_network_training_data,
+)
 
 
 def test_random_sheet_states_returns_expected_shape_and_counts():
@@ -44,4 +48,20 @@ def test_q_network_training_data_random_throws_only():
     )
     assert data.size() == 12
     assert data.answers.shape == (12, 3)
+    np.testing.assert_array_equal(data.answers.sum(axis=1), 1)
+
+
+def test_value_network_training_data_labels_final_score():
+    sheet_states = random_sheet_states(team1=1, team2=1, num_sims=2)
+    assert np.all(sheet_states.next_team_to_play() == 0)
+    data = value_network_training_data(
+        sheet_states=sheet_states,
+        team=0,
+        rng=np.random.default_rng(0),
+    )
+    assert data.size() == 2
+    # Features are the input 2-stone sheets, no throw channels.
+    assert data.raw_inputs.shape == (2, 5 * 2 + 1)
+    # End has 4 stones, so scores are in [-2, 2].
+    assert data.answers.shape == (2, 5)
     np.testing.assert_array_equal(data.answers.sum(axis=1), 1)
