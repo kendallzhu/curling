@@ -6,7 +6,7 @@ import numpy as np
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from constants import center_of_target_house
-from data_generation import random_sheet_states
+from data_generation import q_network_training_data, random_sheet_states
 
 
 def test_random_sheet_states_returns_expected_shape_and_counts():
@@ -31,3 +31,17 @@ def test_random_sheet_states_guard_stones_are_outside_house():
     guard_mask = x < center_of_target_house - 2.0
     assert np.any(guard_mask)
     assert np.all((y[guard_mask] >= 2.5 - 1.0) & (y[guard_mask] <= 2.5 + 1.0))
+
+
+def test_q_network_training_data_random_throws_only():
+    sheet_states = random_sheet_states(team1=1, team2=0, num_sims=3)
+    data = q_network_training_data(
+        sheet_states=sheet_states,
+        team=1,
+        rng=np.random.default_rng(0),
+        n_random_throws=4,
+        n_per_score=0,
+    )
+    assert data.size() == 12
+    assert data.answers.shape == (12, 3)
+    np.testing.assert_array_equal(data.answers.sum(axis=1), 1)
