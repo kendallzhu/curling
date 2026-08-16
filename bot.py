@@ -25,7 +25,7 @@ from constants import (
     min_release_y,
     max_release_y,
     turn_options,
-    value_network_weights_path,
+    q_network_weights_path,
 )
 
 import nn
@@ -167,29 +167,29 @@ def get_most_robust_throw_with_score(
     return best_throws[best_idx], max_robust_score
 
 
-def get_throw_nn_argmax(
+def get_throw_q_argmax(
     state: SheetStates,
     team: int,
     *,
     seed: int = 0,
     throw_searcher: ThrowSearcher | None = None,
-    neural_network: curling_nn.ValueNetwork | None = None,
+    neural_network: curling_nn.QNetwork | None = None,
     normalizer: Normalizer | None = None,
 ) -> tuple[Throw | None, float | None]:
-    """Suggest a throw via ArgmaxThrowPolicy.from_nn_predicting_score_diff.
+    """Suggest a throw via ArgmaxThrowPolicy.from_q_network.
 
     Returns (None, None) if the board stone count does not match the network.
-    The float is the NN expected net score for the throwing team.
+    The float is the Q-network expected net score for the throwing team.
     """
     if throw_searcher is None:
         throw_searcher = ThrowsGridSearcher(num_angles=20, num_speeds=20, num_y_vals=6)
     if neural_network is None or normalizer is None:
-        neural_network, normalizer = curling_nn.load_weights(
-            value_network_weights_path
+        neural_network, normalizer = curling_nn.load_q_weights(
+            q_network_weights_path
         )
     if state.x.shape[1] != neural_network.num_stones:
         return None, None
-    policy = ArgmaxThrowPolicy.from_nn_predicting_score_diff(
+    policy = ArgmaxThrowPolicy.from_q_network(
         random_action_prob=0.0,
         neural_network=neural_network,
         normalizer=normalizer,
@@ -330,15 +330,15 @@ class ArgmaxThrowPolicy(CurlingPolicy):
         )
 
     @classmethod
-    def from_nn_predicting_score_diff(
+    def from_q_network(
         cls,
         random_action_prob: float,
-        neural_network: curling_nn.ValueNetwork,
+        neural_network: curling_nn.QNetwork,
         normalizer: Normalizer,
         throw_searcher: ThrowSearcher,
     ):
         def scoring_function(sheet_states: SheetStates, throws: Throws) -> np.ndarray:
-            input_features = curling_nn.InputFeatures.create_of_sheet_states(
+            input_features = curling_nn.QInputFeatures.create_of_sheet_states(
                 sheet_states, throws, normalizer
             )
             nn_output = neural_network.run(input_features[:, :, None])

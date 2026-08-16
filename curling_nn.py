@@ -10,7 +10,7 @@ import state
 from constants import house_outer_circle_radius, STONE_RADIUS_M
 
 
-class InputFeatures:
+class QInputFeatures:
     @staticmethod
     def raw_of_sheet_states(
         sheet_states: state.SheetStates, throws: state.Throws
@@ -50,7 +50,7 @@ class InputFeatures:
         normalizer: dataset.Normalizer,
     ) -> np.ndarray:
         return normalizer.normalize(
-            InputFeatures.raw_of_sheet_states(sheet_states, throws)
+            QInputFeatures.raw_of_sheet_states(sheet_states, throws)
         )
 
     @staticmethod
@@ -66,7 +66,7 @@ class InputFeatures:
                 -num_stones_per_side, num_stones_per_side + 1, dtype=int
             ).reshape((1, 2 * num_stones_per_side + 1))
         ).astype(int)
-        raw_features = InputFeatures.raw_of_sheet_states(sheet_states, throws)
+        raw_features = QInputFeatures.raw_of_sheet_states(sheet_states, throws)
         normalizer = dataset.Normalizer.from_features(raw_features)
         return dataset.TrainingData(
             input_features=normalizer.normalize(raw_features),
@@ -76,7 +76,7 @@ class InputFeatures:
         )
 
 
-class ValueNetwork(nn.NN):
+class QNetwork(nn.NN):
     def __init__(
         self,
         seed: int,
@@ -136,9 +136,9 @@ class ValueNetwork(nn.NN):
         return weights @ score_values
 
 
-def write_weights(
+def write_q_weights(
     path: str | Path,
-    neural_network: ValueNetwork,
+    neural_network: QNetwork,
     normalizer: dataset.Normalizer,
 ) -> None:
     arrays: dict[str, np.ndarray] = {
@@ -153,11 +153,11 @@ def write_weights(
     np.savez(path, **arrays)
 
 
-def load_weights(path: str | Path) -> tuple[ValueNetwork, dataset.Normalizer]:
+def load_q_weights(path: str | Path) -> tuple[QNetwork, dataset.Normalizer]:
     with np.load(path) as data:
         num_stones = int(data["num_stones"])
         hidden_layer_size = int(data["hidden_layer_size"])
-        neural_network = ValueNetwork(
+        neural_network = QNetwork(
             seed=0,
             num_stones=num_stones,
             hidden_layer_size=hidden_layer_size,
