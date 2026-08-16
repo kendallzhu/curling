@@ -20,9 +20,9 @@ A vectorized curling game engine with physics simulation, AI bot, neural network
 ### Game State & Physics
 - **`constants.py`** – Physical constants (friction mu, gravity, stone radius, sheet dimensions)
 - **`state.py`** – Core data structures: `StoneState`, `SheetState`, `SheetStates` (vectorized), `Throw`, `Velocities`. Batch operations: `add_new_stone(s)`, `empty_board()`, `tile_sheet_states()`
-- **`physics.py`** – Imports abstraction layer; delegates to `physics_numba` or `physics_numpy`
+- **`physics.py`** – Imports abstraction layer; delegates to `physics_numba` or `scratch/physics_numpy.py`
 - **`physics_numba.py`** – High-performance JIT-compiled collision detection & kinematics. Key: `run_to_next_collision_or_stop()`, `run_until_stopping()`, `apply_collision()`
-- **`physics_numpy.py`** – Pure-NumPy reference implementation (slower but readable)
+- **`scratch/physics_numpy.py`** – Pure-NumPy reference implementation (slower but readable)
 - **`scoring.py`** – Vectorized scoring: `get_score()` (per-team), `get_net_score_for_team()`
 
 ### Gameplay
@@ -40,7 +40,7 @@ A vectorized curling game engine with physics simulation, AI bot, neural network
 - **`dataset.py`** – Training data generation. `TrainingData.spiral()` creates nonlinear classification dataset; `shuffle_batches()` for mini-batch training
 
 ### Development
-- **`benchmark.py`** – Performance comparison: `physics_numpy` vs `physics_numba` on 2k sims × 16 stones
+- **`benchmark.py`** – Performance comparison: `scratch.physics_numpy` vs `physics_numba` on 2k sims × 16 stones
 - **`tests/`** – Unit tests for NN and data generation
 
 ## Key Design Patterns

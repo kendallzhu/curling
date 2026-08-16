@@ -51,7 +51,7 @@ def random_sheet_states(*, team1: int, team2: int, num_sims: int = 1) -> state.S
 
 
 def scoring_function_of_nn(
-    neural_network: curling_nn.ValueNetwork,
+    neural_network: curling_nn.QNetwork,
     normalizer: Normalizer,
 ) -> Callable[[state.SheetStates, state.Throws], np.ndarray]:
     """Create a throw scoring function from a trained value network.
@@ -64,7 +64,7 @@ def scoring_function_of_nn(
     def scoring_function(
         sheet_states: state.SheetStates, throws: state.Throws
     ) -> np.ndarray:
-        input_features = curling_nn.InputFeatures.create_of_sheet_states(
+        input_features = curling_nn.QInputFeatures.create_of_sheet_states(
             sheet_states, throws, normalizer
         )
         nn_output = neural_network.run(input_features[:, :, None])
@@ -75,7 +75,7 @@ def scoring_function_of_nn(
 
 
 def scoring_function_of_nn_score_std(
-    neural_network: curling_nn.ValueNetwork,
+    neural_network: curling_nn.QNetwork,
     normalizer: Normalizer,
 ) -> Callable[[state.SheetStates, state.Throws], np.ndarray]:
     """Create a scoring function returning predicted score standard deviation."""
@@ -88,7 +88,7 @@ def scoring_function_of_nn_score_std(
     def scoring_function(
         sheet_states: state.SheetStates, throws: state.Throws
     ) -> np.ndarray:
-        input_features = curling_nn.InputFeatures.create_of_sheet_states(
+        input_features = curling_nn.QInputFeatures.create_of_sheet_states(
             sheet_states, throws, normalizer
         )
         probabilities = nn.softmax(neural_network.run(input_features[:, :, None]))
@@ -116,7 +116,7 @@ def best_throws_for_sheets_by_nn(
     sheet_states: state.SheetStates,
     team: int,
     throw_searcher: ThrowSearcher,
-    neural_network: curling_nn.ValueNetwork,
+    neural_network: curling_nn.QNetwork,
     normalizer: Normalizer,
 ) -> state.Throws:
     """Return each state's highest-scoring throw according to a value network.

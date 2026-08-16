@@ -1,5 +1,5 @@
 import physics_numba
-import physics_numpy
+from scratch import physics_numpy
 
 run_until_stopping = physics_numba.run_until_stopping
 run_to_next_collision_or_stop = physics_numba.run_to_next_collision_or_stop
