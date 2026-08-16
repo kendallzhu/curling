@@ -31,8 +31,8 @@ PANEL_H = 80  # pixels of control panel below the sheet
 SLIDER_BAR_HEIGHT = 10
 SLIDER_BAR_OFFSET = 5
 KNOB_CLICK_RADIUS = 12
-RED_TEAM_COLOR = (200, 50, 50)
-YELLOW_TEAM_COLOR = (200, 200, 20)
+TEAM_0_COLOR = (200, 50, 50) # Red
+TEAM_1_COLOR = (200, 200, 20) # Yellow
 
 TURN_LABELS = {1: "Clockwise", -1: "Counter", 0: "No Spin"}
 TURN_COLOURS = {1: (160, 80, 80), -1: (80, 80, 160), 0: (80, 80, 80)}
@@ -127,7 +127,7 @@ def render_sheet(surface: pygame.Surface, state: SheetState) -> None:
         for stone in state.stones:
             x, y, d, team = stone.x, stone.y, stone.rotation_direction, stone.team
             assert team == 0 or team == 1
-            color = RED_TEAM_COLOR if team == 0 else YELLOW_TEAM_COLOR
+            color = TEAM_0_COLOR if team == 0 else TEAM_1_COLOR
             if x_offset_m <= x <= x_offset_m + half_w:
                 cx, cy = to_px(float(x), float(y))
                 pygame.draw.circle(surface, color, (cx, cy), r)
@@ -148,7 +148,7 @@ def render_sheet(surface: pygame.Surface, state: SheetState) -> None:
 
 
 def render_add_stone_preview(surface, throw: Throw):
-    color = RED_TEAM_COLOR if throw.team == 0 else YELLOW_TEAM_COLOR
+    color = TEAM_0_COLOR if throw.team == 0 else TEAM_1_COLOR
     sw, sh = surface.get_size()
     half_h = sh // 2
     scale = min(sw / (SHEET_W_M / 2), half_h / SHEET_H_M)
