@@ -126,7 +126,7 @@ def test_write_and_load_v_weights(tmp_path):
 
 
 def test_value_network_accepts_v_features():
-    sheet_states = data_generation.random_sheet_states(team1=4, team2=4, num_sims=3)
+    sheet_states = data_generation.random_sheet_states(team1=5, team2=4, num_sims=3)
     raw = curling_nn.VInputFeatures.raw_of_sheet_states(sheet_states)
     normalizer = dataset.Normalizer.from_features(raw)
     features = curling_nn.VInputFeatures.create_of_sheet_states(
@@ -136,10 +136,10 @@ def test_value_network_accepts_v_features():
 
     neural_network = curling_nn.ValueNetwork(
         seed=0,
-        num_stones=8,
+        num_stones=9,
         hidden_layer_size=8,
-        num_stones_per_side=5,
     )
+    assert neural_network.num_stones_per_side == 5
     assert neural_network.linear_layers()[0].weights.shape[1] == features.shape[1]
     nn_output = neural_network.run(features[:, :, None])
     assert nn_output.shape[0] == 3

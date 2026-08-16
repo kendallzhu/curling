@@ -214,7 +214,7 @@ class ValueNetwork(ScoreNetwork):
         output_layer_size: int | None = None,
     ):
         if num_stones_per_side is None:
-            num_stones_per_side = (num_stones + 3) // 2
+            num_stones_per_side = (num_stones + 1) // 2
         super().__init__(
             seed=seed,
             num_stones=num_stones,
@@ -290,7 +290,7 @@ def load_v_weights(path: str | Path) -> tuple[ValueNetwork, dataset.Normalizer]:
         if "num_stones_per_side" in data:
             num_stones_per_side = int(data["num_stones_per_side"])
         else:
-            num_stones_per_side = (num_stones + 3) // 2
+            num_stones_per_side = (num_stones + 1) // 2
         neural_network = ValueNetwork(
             seed=0,
             num_stones=num_stones,

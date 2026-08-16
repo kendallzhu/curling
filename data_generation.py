@@ -446,23 +446,23 @@ def value_network_training_data(
     rng: np.random.Generator,
     num_stones_per_side: int | None = None,
 ) -> TrainingData:
-    """Build a V-network dataset for second-to-last-turn sheets.
+    """Build a V-network dataset for sheets with only the last (hammer) throw left.
 
-    Features are the input sheet (positions only). The current team grid-searches
-    the second-to-last throw, then the opponent grid-searches the last throw.
-    Labels are team-0 net score after that last throw.
+    Features are the input sheet (positions only). The throwing team grid-searches
+    that last throw. Labels are team-0 net score after it stops.
     """
-    second_to_last_throws = _grid_search_throws(sheet_states, team, rng)
-    after_second_to_last = physics.run_until_stopping(
-        sheet_states=state.add_stones_from_throws(sheet_states, second_to_last_throws)
-    )
-    last_throws = _grid_search_throws(after_second_to_last, 1 - team, rng)
+    next_team = sheet_states.next_team_to_play()
+    if not np.all(next_team == team):
+        raise ValueError(
+            f"team {team} is not next to play (next_team_to_play={next_team})"
+        )
+    last_throws = _grid_search_throws(sheet_states, team, rng)
     final_states = physics.run_until_stopping(
-        sheet_states=state.add_stones_from_throws(after_second_to_last, last_throws)
+        sheet_states=state.add_stones_from_throws(sheet_states, last_throws)
     )
     final_scores = scoring.get_net_score_for_team(final_states, 0)
     stones_per_side = (
-        (sheet_states.x.shape[1] + 3) // 2
+        (sheet_states.x.shape[1] + 1) // 2
         if num_stones_per_side is None
         else num_stones_per_side
     )
