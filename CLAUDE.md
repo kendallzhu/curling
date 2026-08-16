@@ -46,10 +46,10 @@ Vectorized curling simulation with Numba physics, actual scoring, grid-search an
   - `QInputFeatures` converts sheet/throw pairs into normalized model features.
   - `QNetwork` predicts a categorical net-score distribution and provides `expected_score`.
   - `load_q_weights` and `write_q_weights` handle model weights plus the feature normalizer.
-- `dataset.py` – `Normalizer`, `TrainingData`, batching, partitioning, the spiral example dataset, and `write_training_data` / `load_training_data`.
+- `dataset.py` – `Normalizer`, `TrainingData`, batching, partitioning, the spiral example dataset, and shard IO (`write_training_data_shard` / `load_training_data_dir`).
 - `training.ipynb` – Current training/exploration notebook.
 - `weights/` – Checked-in saved Q and value network weights plus normalizers.
-- `datasets/` – Checked-in serialized training datasets (`write_training_data` / `load_training_data`).
+- `datasets/` – Checked-in shards under `value_network/` and `q_network/`. Generate writes a new file; load concatenates `raw_inputs` and refits the normalizer.
 - `scratch/nn_scratch_old.ipynb` – Older neural-network scratch notebook.
 
 ### Demo and UI

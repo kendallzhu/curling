@@ -1,15 +1,11 @@
-import os
-import sys
+import time
 
 import numpy as np
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
-
-import dataset
-import nn
 import curling_nn
 import data_generation
-import time
+import dataset
+import nn
 
 
 def test_basic_score_prediction():

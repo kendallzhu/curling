@@ -1,9 +1,4 @@
-import os
-import sys
-
 import numpy as np
-
-sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from constants import center_of_target_house
 from data_generation import (
