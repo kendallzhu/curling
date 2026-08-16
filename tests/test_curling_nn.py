@@ -5,14 +5,10 @@ import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
-import bot
 import dataset
 import nn
 import curling_nn
-import physics
 import data_generation
-import scoring
-import state
 import time
 
 
@@ -26,15 +22,12 @@ def test_basic_score_prediction():
         team2=num_stones_per_side - 1,
         num_sims=100,
     )
-    throws, states = bot.RandomThrows(
-        rng=np.random.default_rng(0), n_throws_to_generate=40
-    ).get_throws_for_num_sims(team=1, sheet_states=seed_states)
-    final_states = physics.run_until_stopping(
-        sheet_states=state.add_stones_from_throws(states, throws)
-    )
-    final_scores = scoring.get_net_score_for_team(final_states, 0)
-    data = curling_nn.QInputFeatures.create_score_match_dataset_from_sheet_states(
-        states, throws, final_scores, num_stones_per_side
+    data = data_generation.q_network_training_data(
+        sheet_states=seed_states,
+        team=1,
+        rng=np.random.default_rng(0),
+        n_random_throws=40,
+        n_per_score=0,
     )
     train_data, validation_data = data.partition(0.2, seed=0)
 
