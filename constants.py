@@ -32,3 +32,6 @@ turn_options = (-1, 0, 1)
 q_network_weights_path = os.path.join(
     os.path.dirname(os.path.abspath(__file__)), "q_network_weights.npz"
 )
+value_network_weights_path = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "value_network_weights.npz"
+)

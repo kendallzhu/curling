@@ -114,52 +114,62 @@ class VInputFeatures:
             num_stones_per_side,
         )
 
+    @staticmethod
+    def create_of_sheet_states(
+        sheet_states: state.SheetStates,
+        normalizer: dataset.Normalizer,
+    ) -> np.ndarray:
+        return normalizer.normalize(VInputFeatures.raw_of_sheet_states(sheet_states))
 
-class QNetwork(nn.NN):
+
+def _score_mlp_layers(
+    rng: np.random.Generator,
+    input_layer_size: int,
+    hidden_layer_size: int,
+    output_layer_size: int,
+) -> list:
+    l1 = nn.LinearBatched(
+        rng.normal(size=(hidden_layer_size, input_layer_size))
+        * np.sqrt(2 / input_layer_size)
+    )
+    l2 = nn.LinearBatched(
+        rng.normal(size=(hidden_layer_size, hidden_layer_size))
+        * np.sqrt(2 / hidden_layer_size)
+    )
+    l3 = nn.LinearBatched(
+        rng.normal(size=(hidden_layer_size, hidden_layer_size))
+        * np.sqrt(2 / hidden_layer_size)
+    )
+    l4 = nn.LinearBatched(
+        1
+        / np.sqrt(hidden_layer_size)
+        * rng.normal(size=(output_layer_size, hidden_layer_size))
+    )
+    return [l1, nn.Max0(), l2, nn.Max0(), l3, nn.Max0(), l4]
+
+
+class ScoreNetwork(nn.NN):
     def __init__(
         self,
+        *,
         seed: int,
         num_stones: int,
-        hidden_layer_size: int = 20,
+        input_layer_size: int,
+        hidden_layer_size: int,
+        num_stones_per_side: int,
         output_layer_size: int | None = None,
     ):
         self.num_stones = num_stones
         self.hidden_layer_size = hidden_layer_size
-        self.num_stones_per_side = (num_stones + 1) // 2
+        self.num_stones_per_side = num_stones_per_side
         if output_layer_size is None:
-            output_layer_size = 2 * self.num_stones_per_side + 1
+            output_layer_size = 2 * num_stones_per_side + 1
         rng = np.random.default_rng(seed)
-
-        # TODO: clarify
-        input_layer_size = 5 * num_stones + 7
-
-        l1 = nn.LinearBatched(
-            rng.normal(size=(hidden_layer_size, input_layer_size))
-            * np.sqrt(2 / input_layer_size)
+        super().__init__(
+            _score_mlp_layers(
+                rng, input_layer_size, hidden_layer_size, output_layer_size
+            )
         )
-        act1 = nn.Max0()
-
-        l2 = nn.LinearBatched(
-            rng.normal(size=(hidden_layer_size, hidden_layer_size))
-            * np.sqrt(2 / hidden_layer_size)
-        )
-        act2 = nn.Max0()
-
-        l3 = nn.LinearBatched(
-            rng.normal(size=(hidden_layer_size, hidden_layer_size))
-            * np.sqrt(2 / hidden_layer_size)
-        )
-        act3 = nn.Max0()
-
-        l4 = nn.LinearBatched(
-            1
-            / np.sqrt(hidden_layer_size)
-            * rng.normal(size=(output_layer_size, hidden_layer_size))
-        )
-
-        layers = [l1, act1, l2, act2, l3, act3, l4]
-
-        super().__init__(layers)
 
     def linear_layers(self) -> list[nn.LinearBatched]:
         return [layer for layer in self.layers if isinstance(layer, nn.LinearBatched)]
@@ -175,16 +185,58 @@ class QNetwork(nn.NN):
         return weights @ score_values
 
 
-def write_q_weights(
+class QNetwork(ScoreNetwork):
+    def __init__(
+        self,
+        seed: int,
+        num_stones: int,
+        hidden_layer_size: int = 20,
+        output_layer_size: int | None = None,
+    ):
+        super().__init__(
+            seed=seed,
+            num_stones=num_stones,
+            input_layer_size=5 * num_stones + 7,
+            hidden_layer_size=hidden_layer_size,
+            num_stones_per_side=(num_stones + 1) // 2,
+            output_layer_size=output_layer_size,
+        )
+
+
+class ValueNetwork(ScoreNetwork):
+    def __init__(
+        self,
+        seed: int,
+        num_stones: int,
+        hidden_layer_size: int = 20,
+        num_stones_per_side: int | None = None,
+        output_layer_size: int | None = None,
+    ):
+        if num_stones_per_side is None:
+            num_stones_per_side = (num_stones + 3) // 2
+        super().__init__(
+            seed=seed,
+            num_stones=num_stones,
+            input_layer_size=5 * num_stones + 1,
+            hidden_layer_size=hidden_layer_size,
+            num_stones_per_side=num_stones_per_side,
+            output_layer_size=output_layer_size,
+        )
+
+
+def _write_score_weights(
     path: str | Path,
-    neural_network: QNetwork,
+    neural_network: ScoreNetwork,
     normalizer: dataset.Normalizer,
+    **extra: np.ndarray,
 ) -> None:
     arrays: dict[str, np.ndarray] = {
         "num_stones": np.asarray(neural_network.num_stones),
         "hidden_layer_size": np.asarray(neural_network.hidden_layer_size),
+        "num_stones_per_side": np.asarray(neural_network.num_stones_per_side),
         "feature_means": np.asarray(normalizer.feature_means),
         "feature_stdevs": np.asarray(normalizer.feature_stdevs),
+        **extra,
     }
     for i, layer in enumerate(neural_network.linear_layers()):
         arrays[f"w{i}"] = layer.weights
@@ -192,20 +244,57 @@ def write_q_weights(
     np.savez(path, **arrays)
 
 
+def _load_normalizer_and_layers(
+    data, neural_network: ScoreNetwork
+) -> dataset.Normalizer:
+    for i, layer in enumerate(neural_network.linear_layers()):
+        layer.weights = np.array(data[f"w{i}"], copy=True)
+        layer.bias = np.array(data[f"b{i}"], copy=True)
+    return dataset.Normalizer(
+        feature_means=np.array(data["feature_means"], copy=True),
+        feature_stdevs=np.array(data["feature_stdevs"], copy=True),
+    )
+
+
+def write_q_weights(
+    path: str | Path,
+    neural_network: QNetwork,
+    normalizer: dataset.Normalizer,
+) -> None:
+    _write_score_weights(path, neural_network, normalizer)
+
+
 def load_q_weights(path: str | Path) -> tuple[QNetwork, dataset.Normalizer]:
     with np.load(path) as data:
-        num_stones = int(data["num_stones"])
-        hidden_layer_size = int(data["hidden_layer_size"])
         neural_network = QNetwork(
             seed=0,
+            num_stones=int(data["num_stones"]),
+            hidden_layer_size=int(data["hidden_layer_size"]),
+        )
+        normalizer = _load_normalizer_and_layers(data, neural_network)
+    return neural_network, normalizer
+
+
+def write_v_weights(
+    path: str | Path,
+    neural_network: ValueNetwork,
+    normalizer: dataset.Normalizer,
+) -> None:
+    _write_score_weights(path, neural_network, normalizer)
+
+
+def load_v_weights(path: str | Path) -> tuple[ValueNetwork, dataset.Normalizer]:
+    with np.load(path) as data:
+        num_stones = int(data["num_stones"])
+        if "num_stones_per_side" in data:
+            num_stones_per_side = int(data["num_stones_per_side"])
+        else:
+            num_stones_per_side = (num_stones + 3) // 2
+        neural_network = ValueNetwork(
+            seed=0,
             num_stones=num_stones,
-            hidden_layer_size=hidden_layer_size,
+            hidden_layer_size=int(data["hidden_layer_size"]),
+            num_stones_per_side=num_stones_per_side,
         )
-        for i, layer in enumerate(neural_network.linear_layers()):
-            layer.weights = np.array(data[f"w{i}"], copy=True)
-            layer.bias = np.array(data[f"b{i}"], copy=True)
-        normalizer = dataset.Normalizer(
-            feature_means=np.array(data["feature_means"], copy=True),
-            feature_stdevs=np.array(data["feature_stdevs"], copy=True),
-        )
+        normalizer = _load_normalizer_and_layers(data, neural_network)
     return neural_network, normalizer

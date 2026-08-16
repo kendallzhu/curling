@@ -97,3 +97,56 @@ def test_write_and_load_q_weights(tmp_path):
         np.testing.assert_allclose(original.bias, loaded.bias)
     np.testing.assert_allclose(loaded_norm.feature_means, normalizer.feature_means)
     np.testing.assert_allclose(loaded_norm.feature_stdevs, normalizer.feature_stdevs)
+
+
+def test_write_and_load_v_weights(tmp_path):
+    num_stones = 8
+    num_stones_per_side = 5
+    neural_network = curling_nn.ValueNetwork(
+        seed=1,
+        num_stones=num_stones,
+        hidden_layer_size=8,
+        num_stones_per_side=num_stones_per_side,
+    )
+    feature_dim = 5 * num_stones + 1
+    normalizer = dataset.Normalizer(
+        feature_means=np.arange(feature_dim, dtype=float),
+        feature_stdevs=np.linspace(0.5, 1.5, feature_dim),
+    )
+    path = tmp_path / "v_weights.npz"
+    curling_nn.write_v_weights(path, neural_network, normalizer)
+    loaded_nn, loaded_norm = curling_nn.load_v_weights(path)
+
+    assert loaded_nn.num_stones == num_stones
+    assert loaded_nn.hidden_layer_size == 8
+    assert loaded_nn.num_stones_per_side == num_stones_per_side
+    for original, loaded in zip(
+        neural_network.linear_layers(), loaded_nn.linear_layers()
+    ):
+        np.testing.assert_allclose(original.weights, loaded.weights)
+        np.testing.assert_allclose(original.bias, loaded.bias)
+    np.testing.assert_allclose(loaded_norm.feature_means, normalizer.feature_means)
+    np.testing.assert_allclose(loaded_norm.feature_stdevs, normalizer.feature_stdevs)
+
+
+def test_value_network_accepts_v_features():
+    sheet_states = data_generation.random_sheet_states(team1=4, team2=4, num_sims=3)
+    raw = curling_nn.VInputFeatures.raw_of_sheet_states(sheet_states)
+    normalizer = dataset.Normalizer.from_features(raw)
+    features = curling_nn.VInputFeatures.create_of_sheet_states(
+        sheet_states, normalizer
+    )
+    np.testing.assert_allclose(features, normalizer.normalize(raw))
+
+    neural_network = curling_nn.ValueNetwork(
+        seed=0,
+        num_stones=8,
+        hidden_layer_size=8,
+        num_stones_per_side=5,
+    )
+    assert neural_network.linear_layers()[0].weights.shape[1] == features.shape[1]
+    nn_output = neural_network.run(features[:, :, None])
+    assert nn_output.shape[0] == 3
+    assert nn_output.shape[1] == 11
+    expected = neural_network.expected_score(nn_output)
+    assert expected.shape == (3,)
