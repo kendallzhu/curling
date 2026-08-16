@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
+import polars as pl
 
 import nn
 
@@ -94,27 +95,23 @@ def _probabilities(neural_network: Any, input_features: np.ndarray) -> np.ndarra
         output = output[:, :, None]
     if output.ndim != 3 or output.shape[2] != 1:
         raise ValueError("neural network output must have shape (n, scores) or (n, scores, 1)")
-    probabilities = np.asarray(nn.softmax(output))
-    probabilities = probabilities[:, :, 0]
+    probabilities = np.asarray(nn.softmax(output))[:, :, 0]
     if probabilities.ndim != 2:
         raise ValueError("neural network output must have one score axis")
     return probabilities
 
 
-def compute_stats(
+def create_prediction_dataframe(
     neural_network: Any,
     data: Any,
     *,
     score_values: np.ndarray | None = None,
-    num_bootstrap_samples: int = 1000,
-    seed: int = 0,
-) -> NeuralNetStats:
-    """Compute score-distribution, calibration, and expected-score statistics.
+) -> pl.DataFrame:
+    """Create one row per simulation and possible final score.
 
     ``data`` must provide ``input_features`` and ``answers`` like
-    :class:`dataset.TrainingData`.  Answers may be one-hot score vectors or
-    integer score labels.  The feature construction is intentionally left to
-    the caller, so this works for state-only and state-plus-throw networks.
+    :class:`dataset.TrainingData`. Answers may be one-hot score vectors or
+    integer score labels.
     """
     input_features = np.asarray(data.input_features)
     if input_features.ndim != 2:
@@ -129,39 +126,104 @@ def compute_stats(
     score_values = np.asarray(score_values)
     if score_values.ndim != 1 or score_values.size != probabilities.shape[1]:
         raise ValueError("score_values must have one value per network output")
-
     actual_indices = _score_indices(np.asarray(data.answers), score_values)
-    actual_scores = score_values[actual_indices]
-    predicted_scores = probabilities @ score_values
+
+    return pl.DataFrame(
+        {
+            "sim_idx": np.repeat(np.arange(probabilities.shape[0]), probabilities.shape[1]),
+            "score": np.tile(score_values, probabilities.shape[0]),
+            "pred_prob": probabilities.reshape(-1),
+            "actually_happened": np.eye(probabilities.shape[1], dtype=bool)[actual_indices].reshape(-1),
+        }
+    )
+
+
+def compute_stats(
+    predictions: pl.DataFrame,
+    *,
+    num_bootstrap_samples: int = 1000,
+    seed: int = 0,
+) -> NeuralNetStats:
+    """Compute statistics from a prediction dataframe.
+
+    The dataframe must contain ``sim_idx``, ``score``, ``pred_prob``, and
+    ``actually_happened`` columns, as produced by
+    :func:`create_prediction_dataframe`.
+    """
+    required_columns = {"sim_idx", "score", "pred_prob", "actually_happened"}
+    missing_columns = required_columns - set(predictions.columns)
+    if missing_columns:
+        raise ValueError(f"prediction dataframe is missing columns: {sorted(missing_columns)}")
+    if predictions.is_empty():
+        raise ValueError("prediction dataframe cannot be empty")
+
+    predictions = predictions.sort(["sim_idx", "score"])
+    probability_sums = (
+        predictions.group_by("sim_idx", maintain_order=True)
+        .agg(pl.col("pred_prob").sum().alias("probability_sum"))
+    )
+    invalid_sums = probability_sums.filter(
+        ~pl.col("probability_sum").is_close(1.0, abs_tol=1e-7, rel_tol=1e-6)
+    )
+    if not invalid_sums.is_empty():
+        example = invalid_sums.row(0, named=True)
+        raise ValueError(
+            "Neural-net score probabilities do not sum to 1 for "
+            f"sheet state {example['sim_idx']}: "
+            f"sum={float(example['probability_sum']):.6g}"
+        )
+
+    actual_rows = predictions.filter(pl.col("actually_happened")).sort("sim_idx")
+    sim_count = probability_sums.height
+    actual_counts = actual_rows.group_by("sim_idx").len()
+    if (
+        actual_rows.height != sim_count
+        or actual_counts.height != sim_count
+        or not (actual_counts["len"] == 1).all()
+    ):
+        raise ValueError("each sheet state must have exactly one actually_happened score")
+
+    actual_scores = actual_rows["score"].to_numpy()
+    predicted_scores = (
+        predictions.with_columns(
+            (pl.col("score") * pl.col("pred_prob")).alias("weighted_score")
+        )
+        .group_by("sim_idx", maintain_order=True)
+        .agg(pl.col("weighted_score").sum())
+        .get_column("weighted_score")
+        .to_numpy()
+    )
     r_squared = _r_squared(actual_scores, predicted_scores)
     r_squared_stderr = _r_squared_stderr(
         actual_scores, predicted_scores, num_bootstrap_samples, seed
     )
 
-    actual_probabilities = np.clip(probabilities[np.arange(len(actual_indices)), actual_indices], 1e-15, 1.0)
+    actual_probabilities = np.clip(actual_rows["pred_prob"].to_numpy(), 1e-15, 1.0)
     correct_score_probability = Estimate(
         float(np.mean(actual_probabilities)), _standard_error(actual_probabilities)
     )
     negative_log_probability = -np.log(actual_probabilities)
 
     calibration: list[CalibrationBucket] = []
-    binary_outcomes = np.eye(probabilities.shape[1], dtype=float)[actual_indices]
     for bucket_index in range(10):
         lower = bucket_index / 10
         upper = (bucket_index + 1) / 10
-        in_bucket = (
-            (probabilities >= lower)
-            & ((probabilities < upper) | ((bucket_index == 9) & (probabilities <= upper)))
+        bucket = predictions.filter(
+            (pl.col("pred_prob") >= lower)
+            & (
+                (pl.col("pred_prob") < upper)
+                | ((bucket_index == 9) & (pl.col("pred_prob") <= upper))
+            )
         )
-        predictions = probabilities[in_bucket]
-        outcomes = binary_outcomes[in_bucket]
+        bucket_predictions = bucket["pred_prob"].to_numpy()
+        outcomes = bucket["actually_happened"].cast(pl.Float64).to_numpy()
         calibration.append(
             CalibrationBucket(
                 lower_bound=lower,
                 upper_bound=upper,
-                count=int(predictions.size),
-                predicted_fraction=float(np.mean(predictions)) if predictions.size else float("nan"),
-                predicted_stderr=_standard_error(predictions),
+                count=int(bucket_predictions.size),
+                predicted_fraction=float(np.mean(bucket_predictions)) if bucket_predictions.size else float("nan"),
+                predicted_stderr=_standard_error(bucket_predictions),
                 actual_fraction=float(np.mean(outcomes)) if outcomes.size else float("nan"),
                 actual_stderr=_standard_error(outcomes),
             )
@@ -178,4 +240,5 @@ def compute_stats(
     )
 
 
+create_stats_dataframe = create_prediction_dataframe
 compute_neural_net_stats = compute_stats

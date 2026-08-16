@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 
 import stats
 
@@ -27,7 +28,12 @@ def test_stats_use_actual_score_and_calculate_basic_metrics():
         [0, 4, 0],
     ])
 
-    result = stats.compute_stats(FixedNetwork(logits), Data(answers), seed=1)
+    predictions = stats.create_prediction_dataframe(FixedNetwork(logits), Data(answers))
+    assert predictions.columns == [
+        "sim_idx", "score", "pred_prob", "actually_happened"
+    ]
+    assert predictions.height == 12
+    result = stats.compute_stats(predictions, seed=1)
 
     assert result.r_squared.value > 0.9
     assert result.correct_score_probability.value > 0.9
@@ -45,9 +51,10 @@ def test_calibration_tracks_binary_events_for_each_score():
         [0.2, 0.8],
     ]))
 
-    result = stats.compute_stats(
+    predictions = stats.create_prediction_dataframe(
         FixedNetwork(logits), Data(answers), score_values=np.array([0, 1])
     )
+    result = stats.compute_stats(predictions)
 
     bucket = result.calibration[2]
     assert bucket.count == 4
@@ -56,7 +63,24 @@ def test_calibration_tracks_binary_events_for_each_score():
 
 
 def test_integer_score_labels_are_supported():
-    result = stats.compute_stats(
+    predictions = stats.create_prediction_dataframe(
         FixedNetwork([[3, 0, 0], [0, 3, 0]]), Data([-1, 0])
     )
+    result = stats.compute_stats(predictions)
     assert result.correct_score_probability.value > 0.9
+
+
+def test_stats_fail_with_example_when_probabilities_do_not_sum_to_one(monkeypatch):
+    original_softmax = stats.nn.softmax
+
+    def invalid_softmax(logits):
+        probabilities = original_softmax(logits)
+        probabilities[1, 0, 0] += 0.25
+        return probabilities
+
+    monkeypatch.setattr(stats.nn, "softmax", invalid_softmax)
+    predictions = stats.create_prediction_dataframe(
+        FixedNetwork([[1, 0, 0], [0, 1, 0]]), Data([-1, 0])
+    )
+    with pytest.raises(ValueError, match=r"sheet state 1: sum=1\.25"):
+        stats.compute_stats(predictions)
