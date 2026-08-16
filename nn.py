@@ -359,12 +359,12 @@ def softmax(x):
 
 class SoftmaxCrossEntropyLoss:
     # (n_batch, n_out) -> n_batch
-    def get_loss(self, prediction_logits, actual):
-        prediction = softmax(prediction_logits)
-        prediction = np.clip(prediction, 1e-7, 1 - 1e-7)
-        return -(actual * np.log(prediction)).sum(axis=1)
+    def get_loss(self, prediction, actual):
+        probabilities = softmax(prediction)
+        probabilities = np.clip(probabilities, 1e-7, 1 - 1e-7)
+        return -(actual * np.log(probabilities)).sum(axis=1)
 
     # (n_batch, n_out) -> (n_batch, n_out)
-    def output_gradient(self, prediction_logits, actual):
-        prediction = softmax(prediction_logits)
-        return prediction - actual
+    def output_gradient(self, prediction, actual):
+        probabilities = softmax(prediction)
+        return probabilities - actual

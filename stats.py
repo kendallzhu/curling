@@ -80,7 +80,7 @@ def _r_squared_stderr(
     rng = np.random.default_rng(seed)
     bootstrap_values = np.empty(num_bootstrap_samples)
     valid = 0
-    for i in range(num_bootstrap_samples):
+    for _ in range(num_bootstrap_samples):
         indices = rng.integers(0, actual.size, size=actual.size)
         value = _r_squared(actual[indices], predicted[indices])
         if np.isfinite(value):
@@ -242,3 +242,98 @@ def compute_stats(
 
 create_stats_dataframe = create_prediction_dataframe
 compute_neural_net_stats = compute_stats
+
+
+def print_stats(model_stats: NeuralNetStats) -> None:
+    print(
+        f"expected-score R²: {model_stats.r_squared.value:.3f} ± {model_stats.r_squared.stderr:.3f}"
+    )
+    print(
+        f"P(actual score): {model_stats.correct_score_probability.value:.3f} ± {model_stats.correct_score_probability.stderr:.3f}"
+    )
+    print(
+        f"negative log P(actual): {model_stats.negative_log_probability.value:.3f} ± {model_stats.negative_log_probability.stderr:.3f}"
+    )
+
+
+def plot_calibration(
+    model_stats: NeuralNetStats,
+    *,
+    ax=None,
+    title: str = "Final-score calibration",
+):
+    from matplotlib import pyplot as plt
+
+    calibration = model_stats.calibration
+    midpoints = np.array(
+        [(bucket.lower_bound + bucket.upper_bound) / 2 for bucket in calibration]
+    )
+    observed = np.array([bucket.actual_fraction for bucket in calibration])
+    stderr = np.array([bucket.actual_stderr for bucket in calibration])
+    counts = np.array([bucket.count for bucket in calibration])
+    nonempty = counts > 0
+
+    created_fig = ax is None
+    if ax is None:
+        _, ax = plt.subplots(figsize=(7, 6))
+    ax.errorbar(
+        midpoints[nonempty],
+        observed[nonempty],
+        yerr=stderr[nonempty],
+        fmt="o",
+        capsize=3,
+        label="observed fraction",
+    )
+    ax.plot([0, 1], [0, 1], "--", color="0.5", label="perfect calibration")
+    for x, y, n in zip(midpoints[nonempty], observed[nonempty], counts[nonempty]):
+        ax.annotate(
+            str(n), (x, y), xytext=(4, 4), textcoords="offset points", fontsize=8
+        )
+    ax.set(
+        xlim=(0, 1),
+        ylim=(0, 1),
+        xlabel="predicted probability bucket",
+        ylabel="observed event fraction",
+        title=title,
+    )
+    ax.grid(alpha=0.25)
+    ax.legend()
+    if created_fig:
+        plt.show()
+    return ax
+
+
+def plot_training_losses(losses, val_losses, *, ax=None):
+    from matplotlib import pyplot as plt
+
+    losses = np.asarray(losses, dtype=float)
+    val_losses = np.asarray(val_losses, dtype=float)
+    created_fig = ax is None
+    if ax is None:
+        _, ax = plt.subplots()
+    ax.plot(losses / losses[0], label="train")
+    ax.plot(val_losses / val_losses[0], label="val")
+    ax.set(xlabel="iteration", ylabel="loss / initial loss")
+    ax.legend()
+    if created_fig:
+        plt.show()
+    return ax
+
+
+def plot_score_heatmaps(predicted_probabilities, answers, *, n: int = 40, axs=None):
+    from matplotlib import pyplot as plt
+
+    predicted_probabilities = np.asarray(predicted_probabilities)
+    if predicted_probabilities.ndim == 3:
+        predicted_probabilities = predicted_probabilities[:, :, 0]
+    answers = np.asarray(answers)
+    created_fig = axs is None
+    if axs is None:
+        _, axs = plt.subplots(1, 2, figsize=(10, 4))
+    axs[0].imshow(predicted_probabilities[:n])
+    axs[0].set_title("predicted")
+    axs[1].imshow(answers[:n])
+    axs[1].set_title("actual")
+    if created_fig:
+        plt.show()
+    return axs
