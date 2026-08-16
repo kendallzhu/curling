@@ -1,10 +1,12 @@
 import pygame
 import time
+import sys
 import numpy as np
 import constants
 import bot
 import copy
 import curling_nn
+import threading
 
 from physics import run_to_next_collision_or_stop
 from scoring import get_score
@@ -21,6 +23,64 @@ from user_interface import (
     PANEL_H,
     UIState,
 )
+
+
+def _should_quit(event) -> bool:
+    return event.type == pygame.QUIT or (
+        event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE
+    )
+
+
+def _quit_demo() -> None:
+    pygame.quit()
+    sys.exit(0)
+
+
+def _run_bot_suggestions(sheet_states, team, value_network, value_normalizer):
+    bot_throw, bot_target_score, bot_robust_score = bot.get_throw_grid_search(
+        sheet_states, team
+    )
+    bot_throw_nn, bot_nn_expected_score = bot.get_throw_nn_argmax(
+        sheet_states,
+        team,
+        neural_network=value_network,
+        normalizer=value_normalizer,
+    )
+    return (
+        bot_throw,
+        bot_target_score,
+        bot_robust_score,
+        bot_throw_nn,
+        bot_nn_expected_score,
+    )
+
+
+def _compute_bot_suggestions_interruptibly(
+    sheet_states, team, value_network, value_normalizer
+):
+    """Run bot search off the UI thread so quit events are still handled."""
+    result = {}
+    error = {}
+
+    def worker():
+        try:
+            result["value"] = _run_bot_suggestions(
+                sheet_states, team, value_network, value_normalizer
+            )
+        except Exception as exc:  # noqa: BLE001 - surface to main thread
+            error["exc"] = exc
+
+    thread = threading.Thread(target=worker, daemon=True)
+    thread.start()
+    while thread.is_alive():
+        for event in pygame.event.get():
+            if _should_quit(event):
+                _quit_demo()
+        pygame.event.pump()
+        pygame.time.wait(50)
+    if error:
+        raise error["exc"]
+    return result["value"]
 
 
 
@@ -54,8 +114,18 @@ class LagTracker:
 
 
 if __name__ == "__main__":
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Curling simulator demo")
+    parser.add_argument(
+        "--small",
+        action="store_true",
+        help="Use a smaller window that fits a standard laptop display",
+    )
+    args = parser.parse_args()
+
     pygame.init()
-    monitor_size_multiplier = 1.8
+    monitor_size_multiplier = 0.7 if args.small else 1.8
     window_width = 1800 * monitor_size_multiplier
     window_height = window_width / 2 + PANEL_H
     screen = pygame.display.set_mode((window_width, window_height), pygame.RESIZABLE)
@@ -80,11 +150,11 @@ if __name__ == "__main__":
     while True:
         start_time = time.time()
         score = get_score(previous_sheet_states)[0]
+        next_sheet_states = previous_sheet_states
 
         for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                pygame.quit()
-                exit()
+            if _should_quit(event):
+                _quit_demo()
             ui_state, next_sheet_states = handle_mouse_input(
                 event,
                 screen,
@@ -111,8 +181,18 @@ if __name__ == "__main__":
                 < previous_sheet_states.num_stones(1 - next_team_to_play)
                 else 1 - next_team_to_play
             )
-            bot_throw, bot_target_score, bot_robust_score = bot.get_throw_grid_search(
-                next_sheet_states, next_team_to_play
+            pygame.display.flip()
+            (
+                bot_throw,
+                bot_target_score,
+                bot_robust_score,
+                bot_throw_nn,
+                bot_nn_expected_score,
+            ) = _compute_bot_suggestions_interruptibly(
+                next_sheet_states,
+                next_team_to_play,
+                value_network,
+                value_normalizer,
             )
             print("Bot chosen throw:", bot_throw)
             print(
@@ -120,12 +200,6 @@ if __name__ == "__main__":
             )
             ui_state.bot_throw = bot_throw
 
-            bot_throw_nn, bot_nn_expected_score = bot.get_throw_nn_argmax(
-                next_sheet_states,
-                next_team_to_play,
-                neural_network=value_network,
-                normalizer=value_normalizer,
-            )
             print("Bot NN chosen throw:", bot_throw_nn)
             if bot_nn_expected_score is not None:
                 print(f"Bot NN expected score: {bot_nn_expected_score}")
