@@ -429,10 +429,13 @@ def q_network_training_data(
         sheet_states=state.add_stones_from_throws(states, throws)
     )
     final_scores = scoring.get_net_score_for_team(final_states, 0)
-    if num_stones_per_side is None:
-        num_stones_per_side = (sheet_states.x.shape[1] + 1) // 2
+    stones_per_side = (
+        (sheet_states.x.shape[1] + 1) // 2
+        if num_stones_per_side is None
+        else num_stones_per_side
+    )
     return curling_nn.QInputFeatures.create_score_match_dataset_from_sheet_states(
-        states, throws, final_scores, num_stones_per_side
+        states, throws, final_scores, stones_per_side
     )
 
 
@@ -458,8 +461,11 @@ def value_network_training_data(
         sheet_states=state.add_stones_from_throws(after_second_to_last, last_throws)
     )
     final_scores = scoring.get_net_score_for_team(final_states, 0)
-    if num_stones_per_side is None:
-        num_stones_per_side = (sheet_states.x.shape[1] + 3) // 2
+    stones_per_side = (
+        (sheet_states.x.shape[1] + 3) // 2
+        if num_stones_per_side is None
+        else num_stones_per_side
+    )
     return curling_nn.VInputFeatures.create_score_match_dataset_from_sheet_states(
-        sheet_states, final_scores, num_stones_per_side
+        sheet_states, final_scores, stones_per_side
     )

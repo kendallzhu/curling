@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 
@@ -228,15 +229,13 @@ def _write_score_weights(
     path: str | Path,
     neural_network: ScoreNetwork,
     normalizer: dataset.Normalizer,
-    **extra: np.ndarray,
 ) -> None:
-    arrays: dict[str, np.ndarray] = {
+    arrays: dict[str, Any] = {
         "num_stones": np.asarray(neural_network.num_stones),
         "hidden_layer_size": np.asarray(neural_network.hidden_layer_size),
         "num_stones_per_side": np.asarray(neural_network.num_stones_per_side),
         "feature_means": np.asarray(normalizer.feature_means),
         "feature_stdevs": np.asarray(normalizer.feature_stdevs),
-        **extra,
     }
     for i, layer in enumerate(neural_network.linear_layers()):
         arrays[f"w{i}"] = layer.weights

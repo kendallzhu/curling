@@ -60,6 +60,7 @@ def test_value_network_training_data_labels_final_score():
         rng=np.random.default_rng(0),
     )
     assert data.size() == 2
+    assert data.raw_inputs is not None
     # Features are the input 2-stone sheets, no throw channels.
     assert data.raw_inputs.shape == (2, 5 * 2 + 1)
     # End has 4 stones, so scores are in [-2, 2].
