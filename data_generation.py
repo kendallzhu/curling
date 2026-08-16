@@ -4,6 +4,40 @@ import numpy as np
 
 import state
 from bot import ThrowSearcher, score_throws_by_net_score
+from constants import (
+    center_line_y,
+    center_of_target_house,
+    house_outer_circle_radius,
+)
+
+
+def random_sheet_states(*, team1: int, team2: int, num_sims: int = 1) -> state.SheetStates:
+    num_team0 = team1
+    num_team1 = team2
+    num_stones = num_team0 + num_team1
+    x = np.zeros((num_sims, num_stones), dtype=float)
+    y = np.empty((num_sims, num_stones), dtype=float)
+
+    angle = np.random.uniform(0.0, 2.0 * np.pi, size=(num_sims, num_stones))
+    radius = house_outer_circle_radius * np.sqrt(np.random.uniform(0.0, 1.0, size=(num_sims, num_stones)))
+
+    version = np.random.random(size=(num_sims, num_stones)) < 0.2
+
+    x = center_of_target_house + np.where(
+    version, -np.random.uniform(2.0, 4.0, size=(num_sims, num_stones)), radius * np.cos(angle))
+    y = np.where(version, np.random.uniform(center_line_y - 1.0, center_line_y + 1.0, size=(num_sims, num_stones)), center_line_y + radius * np.sin(angle))
+
+
+    return state.SheetStates(
+        first_team=np.zeros(num_sims, dtype=int),
+        x=x,
+        y=y,
+        velocities=state.Velocities(
+            v=np.zeros((num_sims, num_stones), dtype=float),
+            theta=np.zeros((num_sims, num_stones), dtype=float),
+        ),
+        rotation_directions=np.zeros((num_sims, num_stones), dtype=int),
+    )
 
 
 def sample_throws_by_score_for_sheets(

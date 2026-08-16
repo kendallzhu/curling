@@ -10,10 +10,10 @@ import threading
 
 from physics import run_to_next_collision_or_stop
 from scoring import get_score
+from data_generation import random_sheet_states
 from presets import (
     demo_collisions_sheet_states,
     guard_sheet_states,
-    random_sheet_states,
 )
 from state import empty_board
 from user_interface import (

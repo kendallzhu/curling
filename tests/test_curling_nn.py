@@ -10,7 +10,7 @@ import dataset
 import nn
 import curling_nn
 import physics
-import presets
+import data_generation
 import scoring
 import state
 import time
@@ -21,7 +21,7 @@ def test_basic_score_prediction():
     num_stones_per_side = 5
     np.random.seed(1)
 
-    seed_states = presets.random_sheet_states(
+    seed_states = data_generation.random_sheet_states(
         team1=num_stones_per_side,
         team2=num_stones_per_side - 1,
         num_sims=100,

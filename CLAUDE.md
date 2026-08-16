@@ -27,7 +27,7 @@ A vectorized curling game engine with physics simulation, AI bot, neural network
 
 ### Gameplay
 - **`bot.py`** – Throw selection. `get_throw_grid_search()` evaluates 27k+ throws, ranks by score+robustness. `simulate_score_after_throw()`, `simulate_average_scores_with_noise()` (Monte Carlo)
-- **`presets.py`** – Demo board states: `random_sheet_states()`, `demo_collisions_sheet_states()`, `guard_sheet_states()`
+- **`presets.py`** – Demo board states: `demo_collisions_sheet_states()`, `guard_sheet_states()`
 - **`curling.py`** – Interactive manual gameplay (obsolete; `demo.py` preferred)
 - **`demo.py`** – Main executable. Pygame loop with UI + physics integration. Calls bot for suggestions mid-game
 
@@ -36,11 +36,12 @@ A vectorized curling game engine with physics simulation, AI bot, neural network
 
 ### Training (Separate from Game)
 - **`nn.py`** – Backprop neural network. Classes: `Linear`, `Max0` (ReLU), `MapTo01` (sigmoid), `NN`. Loss: `SquaredErrorLoss`, `CrossEntropyLoss`
+- **`data_generation.py`** – Board/throw sampling for training: `random_sheet_states()`, `sample_throws_by_score_for_sheets()`, `combine_throw_datasets()`
 - **`dataset.py`** – Training data generation. `TrainingData.spiral()` creates nonlinear classification dataset; `shuffle_batches()` for mini-batch training
 
 ### Development
 - **`benchmark.py`** – Performance comparison: `physics_numpy` vs `physics_numba` on 2k sims × 16 stones
-- **`tests/`** – Unit tests for NN and presets
+- **`tests/`** – Unit tests for NN and data generation
 
 ## Key Design Patterns
 

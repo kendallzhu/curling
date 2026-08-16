@@ -6,7 +6,7 @@ import numpy as np
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from constants import center_of_target_house
-from presets import random_sheet_states
+from data_generation import random_sheet_states
 
 
 def test_random_sheet_states_returns_expected_shape_and_counts():
