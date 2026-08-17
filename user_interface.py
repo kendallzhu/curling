@@ -56,7 +56,7 @@ class UIState:
     dragging_speed: bool = False
     dragging_y: bool = False
     bot_throw: Throw | None = None
-    bot_throw_q: Throw | None = None
+    bot_throw_v: Throw | None = None
 
     def to_next_throw(self, team: int) -> Throw:
         return Throw(
@@ -245,7 +245,7 @@ def render_preset_buttons(surface):
 
 
 def draw_panel(
-    surface, angle, speed, y_val, turn_val, score, bot_throw=None, bot_throw_q=None
+    surface, angle, speed, y_val, turn_val, score, bot_throw=None, bot_throw_v=None
 ):
     sw, sh = surface.get_size()
     panel_y = sh - PANEL_H
@@ -270,13 +270,13 @@ def draw_panel(
         (bot_btn_rect.x + 5, bot_btn_rect.y + 10),
     )
 
-    # Bot throw Q button
-    bot_q_btn_rect = pygame.Rect(230, panel_y + 20, 120, 40)
-    q_btn_color = (120, 100, 160) if bot_throw_q else (80, 80, 80)
-    pygame.draw.rect(surface, q_btn_color, bot_q_btn_rect, border_radius=6)
+    # Bot throw V button (second-to-last throw only)
+    bot_v_btn_rect = pygame.Rect(230, panel_y + 20, 120, 40)
+    v_btn_color = (120, 100, 160) if bot_throw_v else (80, 80, 80)
+    pygame.draw.rect(surface, v_btn_color, bot_v_btn_rect, border_radius=6)
     surface.blit(
-        font.render("Bot Throw Q", True, (255, 255, 255)),
-        (bot_q_btn_rect.x + 5, bot_q_btn_rect.y + 10),
+        font.render("Bot Throw V", True, (255, 255, 255)),
+        (bot_v_btn_rect.x + 5, bot_v_btn_rect.y + 10),
     )
 
     # Turn toggle
@@ -348,7 +348,7 @@ def draw_panel(
     return (
         btn_rect,
         bot_btn_rect,
-        bot_q_btn_rect,
+        bot_v_btn_rect,
         (angle_x, slider_y, slider_w),
         (speed_x, slider_y, slider_w),
         (y_x, slider_y, slider_w),
@@ -368,7 +368,7 @@ def render_ui(surface, ui_state: UIState, score, next_team: int):
         ui_state.turn_val,
         score,
         ui_state.bot_throw,
-        ui_state.bot_throw_q,
+        ui_state.bot_throw_v,
     )
 
 
@@ -392,7 +392,7 @@ def handle_mouse_input(
         (
             btn_rect,
             bot_btn_rect,
-            bot_q_btn_rect,
+            bot_v_btn_rect,
             (ax, ay, aw),
             (sx, sy, sw_),
             (yx, yy, yw),
@@ -405,7 +405,7 @@ def handle_mouse_input(
             ui_state.turn_val,
             score,
             ui_state.bot_throw,
-            ui_state.bot_throw_q,
+            ui_state.bot_throw_v,
         )
 
         angle_knob_x = int(
@@ -438,10 +438,10 @@ def handle_mouse_input(
                 next_sheet_states = _apply_suggested_throw(
                     ui_state, next_sheet_states, ui_state.bot_throw
                 )
-        elif bot_q_btn_rect.collidepoint(mx, my) and ui_state.bot_throw_q:
+        elif bot_v_btn_rect.collidepoint(mx, my) and ui_state.bot_throw_v:
             if not current_sheet_states.is_any_stone_moving():
                 next_sheet_states = _apply_suggested_throw(
-                    ui_state, next_sheet_states, ui_state.bot_throw_q
+                    ui_state, next_sheet_states, ui_state.bot_throw_v
                 )
         elif empty_rect.collidepoint(mx, my):
             # Clear sheet
@@ -504,7 +504,7 @@ def handle_mouse_input(
             ui_state.turn_val,
             score,
             ui_state.bot_throw,
-            ui_state.bot_throw_q,
+            ui_state.bot_throw_v,
         )
         if ui_state.dragging_angle:
             t = max(0.0, min(1.0, (mx - ax) / aw))

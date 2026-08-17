@@ -27,8 +27,8 @@ Vectorized curling simulation with Numba physics, actual scoring, grid-search an
   - `RandomThrows` generates random candidates.
   - `score_throws_by_net_score` runs physics and scores candidates.
   - `get_throw_grid_search` chooses a maximum-score throw and then evaluates robustness under noisy throws.
-  - `ArgmaxThrowPolicy` supports actual-score and Q-network scoring.
-  - `get_throw_q_argmax` loads the saved Q network when one is not supplied.
+  - `ArgmaxThrowPolicy` supports actual-score, Q-network, and value-network scoring.
+  - `get_throw_q_argmax` / `get_throw_v_argmax` load saved weights when a network is not supplied. V is enabled only for the second-to-last throw.
 - `data_generation.py` – Dataset and batched throw-selection helpers.
   - `random_sheet_states` creates random boards.
   - `sample_throws_by_score_for_sheets` samples throws by score.
@@ -54,7 +54,7 @@ Vectorized curling simulation with Numba physics, actual scoring, grid-search an
 
 ### Demo and UI
 
-- `demo.py` – Preferred Pygame entry point. It runs the UI, physics, actual-score bot, and Q-network suggestions.
+- `demo.py` – Preferred Pygame entry point. It runs the UI, physics, actual-score bot, and value-network suggestions for the second-to-last throw.
 - `user_interface.py` – Rendering, sliders, throw input, presets, and suggested-throw controls.
 - `presets.py` – Fixed demo boards: `demo_collisions_sheet_states` and `guard_sheet_states`.
 - `curling.py` – Older interactive entry point; use `demo.py` for the current demo.

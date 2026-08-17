@@ -36,27 +36,27 @@ def _quit_demo() -> None:
     sys.exit(0)
 
 
-def _run_bot_suggestions(sheet_states, team, q_network, q_normalizer):
+def _run_bot_suggestions(sheet_states, team, v_network, v_normalizer):
     bot_throw, bot_target_score, bot_robust_score = bot.get_throw_grid_search(
         sheet_states, team
     )
-    bot_throw_q, bot_q_expected_score = bot.get_throw_q_argmax(
+    bot_throw_v, bot_v_expected_score = bot.get_throw_v_argmax(
         sheet_states,
         team,
-        neural_network=q_network,
-        normalizer=q_normalizer,
+        neural_network=v_network,
+        normalizer=v_normalizer,
     )
     return (
         bot_throw,
         bot_target_score,
         bot_robust_score,
-        bot_throw_q,
-        bot_q_expected_score,
+        bot_throw_v,
+        bot_v_expected_score,
     )
 
 
 def _compute_bot_suggestions_interruptibly(
-    sheet_states, team, q_network, q_normalizer
+    sheet_states, team, v_network, v_normalizer
 ):
     """Run bot search off the UI thread so quit events are still handled."""
     result = {}
@@ -65,7 +65,7 @@ def _compute_bot_suggestions_interruptibly(
     def worker():
         try:
             result["value"] = _run_bot_suggestions(
-                sheet_states, team, q_network, q_normalizer
+                sheet_states, team, v_network, v_normalizer
             )
         except Exception as exc:  # noqa: BLE001 - surface to main thread
             error["exc"] = exc
@@ -135,14 +135,14 @@ if __name__ == "__main__":
     timestep = 0.1
 
     ui_state = UIState()
-    q_network, q_normalizer = curling_nn.load_q_weights(
-        constants.q_network_weights_path
+    v_network, v_normalizer = curling_nn.load_v_weights(
+        constants.value_network_weights_path
     )
 
     next_team_to_play = 1
 
     ui_state.bot_throw = None
-    ui_state.bot_throw_q = None
+    ui_state.bot_throw_v = None
 
     lag_tracker = LagTracker()
     has_state_changed = True
@@ -163,7 +163,7 @@ if __name__ == "__main__":
                 previous_sheet_states,
                 preset_states=(
                     demo_collisions_sheet_states,
-                    lambda: random_sheet_states(team1=5, team2=4),
+                    lambda: random_sheet_states(team1=4, team2=4),
                 ),
             )
             if (
@@ -186,13 +186,13 @@ if __name__ == "__main__":
                 bot_throw,
                 bot_target_score,
                 bot_robust_score,
-                bot_throw_q,
-                bot_q_expected_score,
+                bot_throw_v,
+                bot_v_expected_score,
             ) = _compute_bot_suggestions_interruptibly(
                 next_sheet_states,
                 next_team_to_play,
-                q_network,
-                q_normalizer,
+                v_network,
+                v_normalizer,
             )
             print("Bot chosen throw:", bot_throw)
             print(
@@ -200,10 +200,10 @@ if __name__ == "__main__":
             )
             ui_state.bot_throw = bot_throw
 
-            print("Bot Q chosen throw:", bot_throw_q)
-            if bot_q_expected_score is not None:
-                print(f"Bot Q expected score: {bot_q_expected_score}")
-            ui_state.bot_throw_q = bot_throw_q
+            print("Bot V chosen throw:", bot_throw_v)
+            if bot_v_expected_score is not None:
+                print(f"Bot V expected score: {bot_v_expected_score}")
+            ui_state.bot_throw_v = bot_throw_v
 
         pygame.display.flip()
 
