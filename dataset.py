@@ -7,7 +7,6 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
-from matplotlib import pyplot as plt
 
 
 @dataclass(frozen=True)
@@ -143,6 +142,8 @@ class TrainingData:
         return batches
 
     def plot_data(self, ax=None, figsize=(10, 10), size: int = 20):
+        from matplotlib import pyplot as plt
+
         if ax is None:
             _, ax = plt.subplots(figsize=figsize)
         ax.scatter(
