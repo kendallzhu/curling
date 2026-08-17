@@ -296,16 +296,7 @@ def get_throw_grid_search(state: SheetStates, team: int) -> tuple[Throw, float, 
 
     target_score = np.max(scores)
     max_throws_to_evaluate = num_combos // 20
-
-    best_throw, robust_score = get_most_robust_throw_with_score(
-        state=state,
-        throws=throws,
-        scores=scores,
-        target_score=target_score,
-        max_throws_to_evaluate=max_throws_to_evaluate,
-    )
-    while robust_score < target_score - 1:
-        target_score -= 1
+    while True:
         best_throw, robust_score = get_most_robust_throw_with_score(
             state=state,
             throws=throws,
@@ -313,7 +304,9 @@ def get_throw_grid_search(state: SheetStates, team: int) -> tuple[Throw, float, 
             target_score=target_score,
             max_throws_to_evaluate=max_throws_to_evaluate,
         )
-    return best_throw, target_score, robust_score
+        if robust_score >= target_score - 1:
+            return best_throw, target_score, robust_score
+        target_score -= 1
 
 
 class RandomThrows(ThrowSearcher):
