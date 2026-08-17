@@ -3,9 +3,15 @@
 from __future__ import annotations
 
 import numpy as np
+import polars as pl
 
+import bot
+import curling_nn
 import data_generation
 import dataset
+import physics
+import scoring
+import state
 
 
 def apply_model_normalizer(
@@ -107,3 +113,153 @@ def generate_evaluation_data(
         num_stones_per_side=num_stones_per_side,
     )
     return q_data, value_data
+
+
+def write_sheet_states(path, sheet_states: state.SheetStates) -> None:
+    """Save sheet states used by a reproducible policy comparison."""
+    np.savez(
+        path,
+        first_team=sheet_states.first_team,
+        x=sheet_states.x,
+        y=sheet_states.y,
+        velocity_v=sheet_states.velocities.v,
+        velocity_theta=sheet_states.velocities.theta,
+        rotation_directions=sheet_states.rotation_directions,
+    )
+
+
+def load_sheet_states(path) -> state.SheetStates:
+    """Load sheet states written by :func:`write_sheet_states`."""
+    with np.load(path) as data:
+        return state.SheetStates(
+            first_team=np.array(data["first_team"], copy=True),
+            x=np.array(data["x"], copy=True),
+            y=np.array(data["y"], copy=True),
+            velocities=state.Velocities(
+                v=np.array(data["velocity_v"], copy=True),
+                theta=np.array(data["velocity_theta"], copy=True),
+            ),
+            rotation_directions=np.array(data["rotation_directions"], copy=True),
+        )
+
+
+def generate_second_to_last_evaluation_states(
+    *, seed: int = 2026, num_sims: int = 300
+) -> state.SheetStates:
+    """Generate identical 8-stone starting states for both policies."""
+    np.random.seed(seed)
+    return data_generation.random_sheet_states(team1=4, team2=4, num_sims=num_sims)
+
+
+def _select_best_throws(
+    sheet_states: state.SheetStates,
+    team: int,
+    throw_searcher: bot.ThrowSearcher,
+    scores: np.ndarray,
+) -> state.Throws:
+    num_sims = sheet_states.x.shape[0]
+    n_candidates = scores.size // num_sims
+    chosen = (
+        scores.reshape(n_candidates, num_sims).argmax(axis=0) * num_sims
+        + np.arange(num_sims)
+    )
+    candidate_throws, _ = throw_searcher.get_throws_for_num_sims(
+        team=team, sheet_states=sheet_states
+    )
+    return state.Throws(
+        angle_deg=candidate_throws.angle_deg[chosen],
+        speed=candidate_throws.speed[chosen],
+        turn=candidate_throws.turn[chosen],
+        y_val=candidate_throws.y_val[chosen],
+        team=candidate_throws.team[chosen],
+    )
+
+
+def grid_search_best_throws(
+    sheet_states: state.SheetStates,
+    team: int,
+    throw_searcher: bot.ThrowSearcher,
+) -> state.Throws:
+    """Choose throws by actual score after that throw only."""
+    candidate_throws, tiled_states = throw_searcher.get_throws_for_num_sims(
+        team=team, sheet_states=sheet_states
+    )
+    final_states = physics.run_until_stopping(
+        sheet_states=state.add_stones_from_throws(tiled_states, candidate_throws)
+    )
+    scores = scoring.get_net_score_for_team(final_states, team)
+    return _select_best_throws(sheet_states, team, throw_searcher, scores)
+
+
+def value_network_best_throws(
+    sheet_states: state.SheetStates,
+    team: int,
+    throw_searcher: bot.ThrowSearcher,
+    value_network,
+    normalizer: dataset.Normalizer,
+) -> state.Throws:
+    """Choose throws by value on each resulting 9-stone state."""
+    candidate_throws, tiled_states = throw_searcher.get_throws_for_num_sims(
+        team=team, sheet_states=sheet_states
+    )
+    after_throw = physics.run_until_stopping(
+        sheet_states=state.add_stones_from_throws(tiled_states, candidate_throws)
+    )
+    features = curling_nn.VInputFeatures.create_of_sheet_states(
+        after_throw, normalizer
+    )
+    expected_scores = value_network.expected_score(
+        value_network.run(features[:, :, None])
+    )
+    scores_from_team = np.where(candidate_throws.team == 0, 1, -1) * expected_scores
+    return _select_best_throws(sheet_states, team, throw_searcher, scores_from_team)
+
+
+def compare_second_to_last_policies(
+    sheet_states: state.SheetStates,
+    *,
+    second_to_last_team: int,
+    throw_searcher: bot.ThrowSearcher,
+    value_network,
+    value_normalizer: dataset.Normalizer,
+) -> pl.DataFrame:
+    """Compare value-ranked and actual-score-ranked second-to-last throws.
+
+    Both policies use the same actual-score grid search for the final throw.
+    """
+    last_team = 1 - second_to_last_team
+    value_second = value_network_best_throws(
+        sheet_states, second_to_last_team, throw_searcher,
+        value_network, value_normalizer,
+    )
+    grid_second = grid_search_best_throws(
+        sheet_states, second_to_last_team, throw_searcher
+    )
+
+    result = []
+    for policy, second_throw in (
+        ("value_network", value_second),
+        ("grid_search", grid_second),
+    ):
+        after_second = physics.run_until_stopping(
+            sheet_states=state.add_stones_from_throws(sheet_states, second_throw)
+        )
+        last_throw = grid_search_best_throws(after_second, last_team, throw_searcher)
+        final_states = physics.run_until_stopping(
+            sheet_states=state.add_stones_from_throws(after_second, last_throw)
+        )
+        scores = scoring.get_score(final_states)
+        result.append(
+            pl.DataFrame(
+                {
+                    "sim_idx": np.arange(sheet_states.x.shape[0]),
+                    "second_to_last_policy": np.repeat(
+                        policy, sheet_states.x.shape[0]
+                    ),
+                    "team_0_score": scores[:, 0],
+                    "team_1_score": scores[:, 1],
+                    "team_0_net_score": scores[:, 0] - scores[:, 1],
+                }
+            )
+        )
+    return pl.concat(result)
