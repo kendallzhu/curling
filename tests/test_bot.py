@@ -1,7 +1,9 @@
 import numpy as np
 
 import bot
+import curling_nn
 import data_generation
+import dataset
 import physics
 import scoring
 from constants import center_line_y, center_of_target_house
@@ -50,3 +52,36 @@ def test_sample_throws_by_score_on_enemy_button_with_friend_in_house():
     assert other_scores == [], f"unexpected scores returned: {other_scores}"
     for score in expected_scores:
         assert (scores == score).sum() == 1, f"expected one throw with score {score:+d}"
+
+
+def test_get_throw_v_argmax_only_when_one_stone_short_of_v():
+    neural_network = curling_nn.ValueNetwork(seed=0, num_stones=2, hidden_layer_size=4)
+    raw = curling_nn.VInputFeatures.raw_of_sheet_states(
+        data_generation.random_sheet_states(team1=1, team2=1, num_sims=1)
+    )
+    normalizer = dataset.Normalizer.from_features(raw)
+    searcher = bot.ThrowsGridSearcher(2, 2, 1)
+
+    too_many = data_generation.random_sheet_states(team1=1, team2=1, num_sims=1)
+    throw, score = bot.get_throw_v_argmax(
+        too_many,
+        0,
+        throw_searcher=searcher,
+        neural_network=neural_network,
+        normalizer=normalizer,
+    )
+    assert throw is None
+    assert score is None
+
+    sheet = data_generation.random_sheet_states(team1=1, team2=0, num_sims=1)
+    throw, score = bot.get_throw_v_argmax(
+        sheet,
+        1,
+        throw_searcher=searcher,
+        neural_network=neural_network,
+        normalizer=normalizer,
+    )
+    assert throw is not None
+    assert throw.team == 1
+    assert score is not None
+
