@@ -4,7 +4,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import numpy as np
 
@@ -21,16 +21,27 @@ class Normalizer:
     feature_stdevs: np.ndarray
 
     @classmethod
-    def from_features(cls, X):
-        return cls(feature_means=np.mean(X, axis=0), feature_stdevs=np.std(X, axis=0))
+    def from_features(cls, X, mask: np.ndarray | None = None):
+        if mask is None:
+            return cls(feature_means=np.mean(X, axis=0), feature_stdevs=np.std(X, axis=0))
+        # Compute stats only from entries marked present, so placeholder
+        # (e.g. not-yet-thrown/knocked-out stone) values don't skew them.
+        present_count = np.maximum(mask.sum(axis=0), 1)
+        mean = (X * mask).sum(axis=0) / present_count
+        variance = ((X - mean) ** 2 * mask).sum(axis=0) / present_count
+        return cls(feature_means=mean, feature_stdevs=np.sqrt(variance))
 
-    def normalize(self, X):
-        return np.where(
+    def normalize(self, X, mask: np.ndarray | None = None):
+        normalized = np.where(
             self.feature_stdevs == 0,
             X,
             (X - self.feature_means)
             / np.where(self.feature_stdevs == 0, 1, self.feature_stdevs),
         )
+        if mask is not None:
+            # Placeholder entries always normalize to a fixed, learnable value.
+            normalized = np.where(mask, normalized, 0.0)
+        return normalized
 
 
 @dataclass
@@ -39,6 +50,7 @@ class TrainingData:
     answers: np.ndarray
     normalizer: Normalizer
     raw_inputs: np.ndarray
+    mask: np.ndarray | None = None
 
     def size(self) -> int:
         return int(self.input_features.shape[0])
@@ -106,18 +118,22 @@ class TrainingData:
         train_idx = indices[n_val:]
         train_raw = self.raw_inputs[train_idx]
         val_raw = self.raw_inputs[val_idx]
-        normalizer = Normalizer.from_features(train_raw)
+        train_mask = None if self.mask is None else self.mask[train_idx]
+        val_mask = None if self.mask is None else self.mask[val_idx]
+        normalizer = Normalizer.from_features(train_raw, train_mask)
         train = TrainingData(
-            input_features=normalizer.normalize(train_raw),
+            input_features=normalizer.normalize(train_raw, train_mask),
             answers=self.answers[train_idx],
             normalizer=normalizer,
             raw_inputs=train_raw,
+            mask=train_mask,
         )
         validation = TrainingData(
-            input_features=normalizer.normalize(val_raw),
+            input_features=normalizer.normalize(val_raw, val_mask),
             answers=self.answers[val_idx],
             normalizer=normalizer,
             raw_inputs=val_raw,
+            mask=val_mask,
         )
         return train, validation
 
@@ -170,21 +186,25 @@ def write_training_data(path: str | Path, data: TrainingData) -> None:
         "feature_stdevs": data.normalizer.feature_stdevs,
         "raw_inputs": data.raw_inputs,
     }
+    if data.mask is not None:
+        arrays["mask"] = data.mask
     np.savez_compressed(path, **arrays)
 
 
 def load_training_data(path: str | Path) -> TrainingData:
     with np.load(path) as npz:
         raw_inputs = np.array(npz["raw_inputs"], copy=True)
+        mask = np.array(npz["mask"], copy=True) if "mask" in npz else None
         normalizer = Normalizer(
             feature_means=np.array(npz["feature_means"], copy=True),
             feature_stdevs=np.array(npz["feature_stdevs"], copy=True),
         )
         return TrainingData(
-            input_features=normalizer.normalize(raw_inputs),
+            input_features=normalizer.normalize(raw_inputs, mask),
             answers=np.array(npz["answers"], copy=True),
             normalizer=normalizer,
             raw_inputs=raw_inputs,
+            mask=mask,
         )
 
 
@@ -193,12 +213,19 @@ def combine_training_data(*shards: TrainingData) -> TrainingData:
         raise ValueError("need at least one shard")
     raw_inputs = np.concatenate([shard.raw_inputs for shard in shards], axis=0)
     answers = np.concatenate([shard.answers for shard in shards], axis=0)
-    normalizer = Normalizer.from_features(raw_inputs)
+    masks = [shard.mask for shard in shards]
+    mask = (
+        np.concatenate(cast(list[np.ndarray], masks), axis=0)
+        if all(m is not None for m in masks)
+        else None
+    )
+    normalizer = Normalizer.from_features(raw_inputs, mask)
     return TrainingData(
-        input_features=normalizer.normalize(raw_inputs),
+        input_features=normalizer.normalize(raw_inputs, mask),
         answers=answers,
         normalizer=normalizer,
         raw_inputs=raw_inputs,
+        mask=mask,
     )
 
 

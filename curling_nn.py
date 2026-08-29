@@ -8,11 +8,11 @@ import numpy as np
 import nn
 import dataset
 import state
-from constants import house_outer_circle_radius, STONE_RADIUS_M
+from constants import NOT_IN_PLAY_X, house_outer_circle_radius, STONE_RADIUS_M
 
 
 def raw_sheet_state_features(sheet_states: state.SheetStates) -> np.ndarray:
-    is_thrown = np.where(sheet_states.x == 0, 0, 1)
+    is_thrown = np.where(sheet_states.x == NOT_IN_PLAY_X, 0, 1)
     distance_from_center = sheet_states.distance_from_center_of_house()
     is_in_house = np.where(
         distance_from_center < house_outer_circle_radius + STONE_RADIUS_M,
@@ -33,10 +33,34 @@ def raw_sheet_state_features(sheet_states: state.SheetStates) -> np.ndarray:
     )
 
 
+def raw_sheet_state_feature_mask(sheet_states: state.SheetStates) -> np.ndarray:
+    """Presence mask matching raw_sheet_state_features' column layout.
+
+    True for columns reflecting a real stone; False for x/y/distance/is_in_house
+    entries of stones not currently in play (x == NOT_IN_PLAY_X), so a
+    Normalizer can exclude those placeholders from its statistics.
+    """
+    is_thrown = np.where(sheet_states.x == NOT_IN_PLAY_X, 0, 1).astype(bool)
+    num_sims = sheet_states.x.shape[0]
+    always_present = np.ones((num_sims, 1), dtype=bool)
+    return np.concatenate(
+        [
+            always_present,  # first_team
+            np.ones_like(is_thrown),  # is_thrown is itself always meaningful
+            is_thrown,  # x
+            is_thrown,  # y
+            is_thrown,  # distance_from_center
+            is_thrown,  # is_in_house
+        ],
+        axis=1,
+    )
+
+
 def _score_match_dataset(
     raw_features: np.ndarray,
     final_scores: np.ndarray,
     num_stones_per_side: int,
+    mask: np.ndarray | None = None,
 ) -> dataset.TrainingData:
     score_matches = (
         final_scores.reshape((raw_features.shape[0], 1))
@@ -44,12 +68,13 @@ def _score_match_dataset(
             -num_stones_per_side, num_stones_per_side + 1, dtype=int
         ).reshape((1, 2 * num_stones_per_side + 1))
     ).astype(int)
-    normalizer = dataset.Normalizer.from_features(raw_features)
+    normalizer = dataset.Normalizer.from_features(raw_features, mask)
     return dataset.TrainingData(
-        input_features=normalizer.normalize(raw_features),
+        input_features=normalizer.normalize(raw_features, mask),
         answers=score_matches,
         normalizer=normalizer,
         raw_inputs=raw_features,
+        mask=mask,
     )
 
 
@@ -75,13 +100,25 @@ class QInputFeatures:
         )
 
     @staticmethod
+    def raw_mask_of_sheet_states(
+        sheet_states: state.SheetStates, throws: state.Throws
+    ) -> np.ndarray:
+        num_sims = sheet_states.x.shape[0]
+        # The throw being evaluated is always real, so its columns are always present.
+        always_present = np.ones((num_sims, 6), dtype=bool)
+        return np.concatenate(
+            [raw_sheet_state_feature_mask(sheet_states), always_present], axis=1
+        )
+
+    @staticmethod
     def create_of_sheet_states(
         sheet_states: state.SheetStates,
         throws: state.Throws,
         normalizer: dataset.Normalizer,
     ) -> np.ndarray:
         return normalizer.normalize(
-            QInputFeatures.raw_of_sheet_states(sheet_states, throws)
+            QInputFeatures.raw_of_sheet_states(sheet_states, throws),
+            QInputFeatures.raw_mask_of_sheet_states(sheet_states, throws),
         )
 
     @staticmethod
@@ -95,6 +132,7 @@ class QInputFeatures:
             QInputFeatures.raw_of_sheet_states(sheet_states, throws),
             final_scores,
             num_stones_per_side,
+            QInputFeatures.raw_mask_of_sheet_states(sheet_states, throws),
         )
 
 
@@ -113,6 +151,7 @@ class VInputFeatures:
             VInputFeatures.raw_of_sheet_states(sheet_states),
             final_scores,
             num_stones_per_side,
+            raw_sheet_state_feature_mask(sheet_states),
         )
 
     @staticmethod
@@ -120,7 +159,10 @@ class VInputFeatures:
         sheet_states: state.SheetStates,
         normalizer: dataset.Normalizer,
     ) -> np.ndarray:
-        return normalizer.normalize(VInputFeatures.raw_of_sheet_states(sheet_states))
+        return normalizer.normalize(
+            VInputFeatures.raw_of_sheet_states(sheet_states),
+            raw_sheet_state_feature_mask(sheet_states),
+        )
 
 
 def _score_mlp_layers(

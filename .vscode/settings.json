@@ -75,6 +75,14 @@
         "/^venv/bin/python -m pytest -q tests/test_data_generation\\.py --inline-snapshot=fix$/": {
             "approve": true,
             "matchCommandLine": true
+        },
+        "/^venv/bin/python -m pytest -q$/": {
+            "approve": true,
+            "matchCommandLine": true
+        },
+        "/^venv/bin/python -m pytest -q --inline-snapshot=disable$/": {
+            "approve": true,
+            "matchCommandLine": true
         }
     },
     "python.testing.pytestArgs": [

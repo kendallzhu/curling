@@ -49,39 +49,78 @@ def test_generate_random_sheet_state_for_turn_rejects_negative_turn():
     assert False, "expected ValueError for negative turn"
 
 
-def test_generate_random_sheet_state_for_turn_stays_within_stones_thrown():
+def test_generate_random_sheet_state_for_turn_column_count_matches_turn():
+    # num_stones always equals turn exactly now (throws alternate teams, so
+    # column count can't be stochastic without breaking stone_teams() parity).
     rng = np.random.default_rng(1)
     for turn in range(8):
         sheet_states = generate_random_sheet_state_for_turn(turn=turn, rng=rng)
-        assert 0 <= sheet_states.x.shape[1] <= turn
+        assert sheet_states.x.shape[1] == turn
+        in_play = np.count_nonzero(sheet_states.x[0])
+        assert 0 <= in_play <= turn
 
 
 def test_generate_random_sheet_state_for_turn_same_seed_is_reproducible():
     # Same seed sequence must give byte-identical output; no hardcoded
     # magic numbers, so this can't go flaky if the process model changes.
-    counts_a = [
-        generate_random_sheet_state_for_turn(
-            turn=turn, rng=np.random.default_rng(7)
-        ).x.shape[1]
+    states_a = [
+        generate_random_sheet_state_for_turn(turn=turn, rng=np.random.default_rng(7))
         for turn in range(8)
     ]
-    counts_b = [
-        generate_random_sheet_state_for_turn(
-            turn=turn, rng=np.random.default_rng(7)
-        ).x.shape[1]
+    states_b = [
+        generate_random_sheet_state_for_turn(turn=turn, rng=np.random.default_rng(7))
         for turn in range(8)
     ]
-    assert counts_a == counts_b
+    for a, b in zip(states_a, states_b):
+        np.testing.assert_array_equal(a.x, b.x)
+        np.testing.assert_array_equal(a.y, b.y)
 
 
-def test_generate_random_sheet_state_for_turn_stone_count_snapshot():
+def test_generate_random_sheet_state_for_turn_in_play_count_snapshot():
     # Regenerate with: venv/bin/python -m pytest --inline-snapshot=fix <this file>
     rng = np.random.default_rng(123)
-    counts = [
-        generate_random_sheet_state_for_turn(turn=turn, rng=rng).x.shape[1]
+    in_play_counts = [
+        int(
+            np.count_nonzero(
+                generate_random_sheet_state_for_turn(turn=turn, rng=rng).x[0]
+            )
+        )
         for turn in range(10)
     ]
-    assert counts == snapshot([0, 1, 1, 2, 2, 3, 4, 3, 2, 4])
+    assert in_play_counts == snapshot([0, 1, 1, 1, 1, 3, 3, 2, 4, 3])
+
+
+def test_generate_random_sheet_state_for_turn_supports_asymmetric_team_counts():
+    # Default knockout probabilities, chosen seed/turn just happen to leave
+    # team 0 with more stones in play than team 1.
+    turn = 8
+    sheet_states = generate_random_sheet_state_for_turn(
+        turn=turn, rng=np.random.default_rng(2)
+    )
+    assert sheet_states.x.shape[1] == turn
+
+    # (team, in_play) per stone column, e.g. (0, False) means a team-0 stone
+    # that got knocked out.
+    stones = [
+        (int(team), bool(in_play))
+        for team, in_play in zip(
+            sheet_states.stone_teams()[0], sheet_states.x[0] != 0
+        )
+    ]
+    assert stones == snapshot(
+        [
+            (0, False),
+            (1, False),
+            (0, False),
+            (1, False),
+            (0, True),
+            (1, False),
+            (0, True),
+            (1, True),
+        ]
+    )
+    assert sum(in_play for team, in_play in stones if team == 0) == 2
+    assert sum(in_play for team, in_play in stones if team == 1) == 1
 
 
 def test_q_network_training_data_random_throws_only():

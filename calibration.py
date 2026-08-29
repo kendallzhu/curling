@@ -19,10 +19,11 @@ def apply_saved_normalizer(
     if raw_data.raw_inputs is None:
         raise ValueError("raw_data.raw_inputs is required to apply a saved normalizer")
     return dataset.TrainingData(
-        input_features=normalizer.normalize(raw_data.raw_inputs),
+        input_features=normalizer.normalize(raw_data.raw_inputs, raw_data.mask),
         answers=raw_data.answers,
         normalizer=normalizer,
         raw_inputs=raw_data.raw_inputs,
+        mask=raw_data.mask,
     )
 
 

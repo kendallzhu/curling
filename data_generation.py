@@ -19,10 +19,25 @@ from bot import (
 )
 
 from constants import (
+    NOT_IN_PLAY_X,
     center_line_y,
     center_of_target_house,
     house_outer_circle_radius,
 )
+
+
+def _sample_stone_positions(
+    num_sims: int, num_stones: int, uniform, random
+) -> tuple[np.ndarray, np.ndarray]:
+    angle = uniform(0.0, 2.0 * np.pi, size=(num_sims, num_stones))
+    radius = house_outer_circle_radius * np.sqrt(uniform(0.0, 1.0, size=(num_sims, num_stones)))
+
+    version = random(size=(num_sims, num_stones)) < 0.2
+
+    x = center_of_target_house + np.where(
+    version, -uniform(2.0, 4.0, size=(num_sims, num_stones)), radius * np.cos(angle))
+    y = np.where(version, uniform(center_line_y - 1.0, center_line_y + 1.0, size=(num_sims, num_stones)), center_line_y + radius * np.sin(angle))
+    return x, y
 
 
 def random_sheet_states(
@@ -38,18 +53,8 @@ def random_sheet_states(
     num_team0 = team1
     num_team1 = team2
     num_stones = num_team0 + num_team1
-    x = np.zeros((num_sims, num_stones), dtype=float)
-    y = np.empty((num_sims, num_stones), dtype=float)
 
-    angle = uniform(0.0, 2.0 * np.pi, size=(num_sims, num_stones))
-    radius = house_outer_circle_radius * np.sqrt(uniform(0.0, 1.0, size=(num_sims, num_stones)))
-
-    version = random(size=(num_sims, num_stones)) < 0.2
-
-    x = center_of_target_house + np.where(
-    version, -uniform(2.0, 4.0, size=(num_sims, num_stones)), radius * np.cos(angle))
-    y = np.where(version, uniform(center_line_y - 1.0, center_line_y + 1.0, size=(num_sims, num_stones)), center_line_y + radius * np.sin(angle))
-
+    x, y = _sample_stone_positions(num_sims, num_stones, uniform, random)
 
     return state.SheetStates(
         first_team=np.zeros(num_sims, dtype=int),
@@ -63,9 +68,12 @@ def random_sheet_states(
     )
 
 
-# Simple process model for a mid-turn board: each throw so far adds one
-# stone, with a small chance that throw is later knocked out of play (and a
-# smaller chance the knockout takes two stones with it).
+# Simple process model for a mid-turn board: teams alternate throws (as in
+# real curling), each throw adds one stone, and a throw may knock one or two
+# of the opponent's currently-in-play stones out of the game. Knocked-out
+# stones stay as columns (matching the alternating team-parity layout
+# elsewhere) but are placed at NOT_IN_PLAY_X, the same "not present" sentinel
+# already read by curling_nn.raw_sheet_state_features' is_thrown feature.
 _TURN_REMOVE_PROB = 0.5
 _TURN_REMOVE_TWO_PROB = 0.15
 
@@ -75,26 +83,44 @@ def generate_random_sheet_state_for_turn(
 ) -> state.SheetStates:
     """Generate a random board representative of a given turn in an end.
 
-    Unlike ``random_sheet_states``, which always fills every requested stone,
-    this simulates ``turn`` throws, alternating the throwing team, where each
-    throw adds a stone for the thrower and may knock out one or two of the
-    opponent's stones. The whole batch shares one sampled stone count/split,
-    matching the fixed ``(num_sims, num_stones)`` layout used elsewhere.
+    ``turn`` stones are always present as columns (throws alternate teams,
+    matching ``SheetStates.stone_teams()``'s parity-based team assignment),
+    but stones knocked out of play are zeroed out rather than removed, so
+    the two teams can end up with very different numbers of stones actually
+    in play. The whole batch shares one sampled knockout trace; only stone
+    positions differ per simulation.
     """
     if turn < 0:
         raise ValueError(f"turn must be >= 0, got {turn}")
 
-    team_counts = [0, 0]
-    for i in range(turn):
+    num_stones = turn
+    in_play = [True] * num_stones
+    for i in range(num_stones):
         thrower = i % 2
-        team_counts[thrower] += 1
         if rng.random() < _TURN_REMOVE_PROB:
             opponent = 1 - thrower
-            remove_count = 2 if rng.random() < _TURN_REMOVE_TWO_PROB else 1
-            team_counts[opponent] = max(0, team_counts[opponent] - remove_count)
+            opponent_in_play = [j for j in range(i) if j % 2 == opponent and in_play[j]]
+            if opponent_in_play:
+                remove_count = 2 if rng.random() < _TURN_REMOVE_TWO_PROB else 1
+                remove_count = min(remove_count, len(opponent_in_play))
+                for idx in rng.choice(opponent_in_play, size=remove_count, replace=False):
+                    in_play[int(idx)] = False
 
-    team0, team1 = team_counts
-    return random_sheet_states(team1=team0, team2=team1, num_sims=num_sims)
+    x, y = _sample_stone_positions(num_sims, num_stones, rng.uniform, rng.random)
+    in_play_mask = np.asarray(in_play, dtype=bool)
+    x = np.where(in_play_mask, x, NOT_IN_PLAY_X)
+    y = np.where(in_play_mask, y, NOT_IN_PLAY_X)
+
+    return state.SheetStates(
+        first_team=np.zeros(num_sims, dtype=int),
+        x=x,
+        y=y,
+        velocities=state.Velocities(
+            v=np.zeros((num_sims, num_stones), dtype=float),
+            theta=np.zeros((num_sims, num_stones), dtype=float),
+        ),
+        rotation_directions=np.zeros((num_sims, num_stones), dtype=int),
+    )
 
 
 def scoring_function_of_nn(

@@ -17,6 +17,11 @@ STONE_RADIUS_M = 0.145
 STONE_INNER_RING_RADIUS_M = 0.0625
 ROTATION_RATE = (4 * 2 * math.pi) / 25.0  # 4 full rotations over 25m
 
+# Sentinel x (and y) value marking a stone column as not currently in play
+# (not yet thrown, or knocked out). Real thrown stones never reach x=0, which
+# is behind starting_release_point.
+NOT_IN_PLAY_X = 0.0
+
 ui_sim_index = 0
 
 # Throw parameter bounds (shared by UI sliders and bot search)
