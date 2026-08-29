@@ -1,0 +1,25 @@
+I'd like to start simulating games further out. Suppose there's a game of curling with N stones per team. For 1 <= n <= 2N, define f_n : [set of sheet states with n stones] x {-N, ..., N} -> [0, 1]
+  recursively with the following properties:
+  1. For all s, \sum_{k=-N}^{N} f_n(s, k) = 1.
+  2. f_{2N}(s, k) = 1 if (final score for team 0 in s - final score for team 1 in s) = k, else 0.
+  3. Let G : (sheet state with k stones) -> (list of sheet states with k+1 stones) be a function that proposes candidate throws (currently we use grid search + random). Then, for 1 <= n < 2N, let f_n(s,
+  k) = f_{n+1}(s', k), where s' = (-1)^n argmax_{t \in G(s)} [ (-1)^n \sum_{j=-N}^N jf_{n+1}(t, j) ] is the optimal next throw for the opposing team.
+
+  For each 1 <= n < 2N, we train a model m_n to predict f_n. Our existing training notebook generates a dataset and training loop to train m_{2N-1}. I'd like to generalize this to sequentially train
+  m_{2N-1}, m_{2N-2}, ..., m_1. Here we're using N=5. For each m_n, we generate a dataset of states with n stones using data_generation.random_sheet_states, then simulate choosing future moves using the
+  already trained models m_k for n+1 <= k < 2N (and f_{2N}, which is trivially derivable from the scoring function) via minimax. Each training row for m_n consists of a SheetStates containing n throws
+  and a final score differential after the game ends (after all 2N throws).
+
+  At the very end, after all models m_i are trained, we will train a final model m accepting arbitrary sheet states s with between 1 and 2N-1 stones and predicting final scores. We will start by having m
+  predict the outputs of the m_i's (so that we can generate large amounts of training data for m by evaluating the m_i's, without having to do O(|G(s)|) simulations per sheet state s).
+
+  You should make a new scratch notebook to do the following:
+  - generate and store the training datasets D_i for each model m_i, as a function of m_{i+1}, ..., m_{2N-1}, f_{2N}.
+  - train the model m_i given the dataset D_i. evaluate it using the same stats we've been using for M_{2N-1}
+  - for each i, evaluate the average score differential between using m_i to decide on the i'th throw and using grid search to greedily maximize (my team - other team) score diff after the i'th throw to
+  pick it.
+  - save the models and evaluation information (enough to compute any stats we care about)
+  - given some sequence of models m_{2N-1}, ..., m_k, and a desired distribution of the fraction of desired states with each number of stones generate a training dataset of sheet states with k through 2N-1 throws according to that distribution, such that any state with i stones is labeled according to model m_i's prediction of the probability of each score
+ - train a final model m to predict this dataset (using the outputs of the intermediate models)
+
+please ask for clarification on anything that's ambiguous before starting. when possible, format your requests for clarification as multiple choice questions between different possible resolutions of the ambiguity which you think are reasonable, but don't force yourself to do this when it seems unnatural.

@@ -146,3 +146,20 @@ def test_value_network_accepts_v_features():
     assert nn_output.shape[1] == 11
     expected = neural_network.expected_score(nn_output)
     assert expected.shape == (3,)
+
+
+def test_print_trainable_parameter_info(capsys):
+    neural_network = curling_nn.ValueNetwork(
+        seed=0,
+        num_stones=8,
+        hidden_layer_size=8,
+        num_stones_per_side=5,
+    )
+
+    parameter_count = curling_nn.print_trainable_parameter_info(neural_network)
+
+    assert parameter_count == 579
+    output = capsys.readouterr().out
+    assert "linear layer 0: weights (8, 41), bias (8, 1)" in output
+    assert "linear layer 3: weights (11, 8), bias (11, 1)" in output
+    assert "total trainable parameters: 579" in output

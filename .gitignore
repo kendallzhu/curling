@@ -6,3 +6,4 @@ curling.egg-info/
 venv/
 .venv
 src/
+./datasets/value_network/value_100000*

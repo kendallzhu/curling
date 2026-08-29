@@ -1,3 +1,4 @@
+from pathlib import Path
 from typing import Callable
 
 import numpy as np
@@ -5,6 +6,7 @@ import numpy as np
 import state
 import curling_nn
 import nn
+import dataset
 import physics
 import scoring
 from dataset import Normalizer, TrainingData
@@ -24,21 +26,30 @@ from constants import (
 )
 
 
-def random_sheet_states(*, team1: int, team2: int, num_sims: int = 1) -> state.SheetStates:
+def random_sheet_states(
+    *, team1: int, team2: int, num_sims: int = 1,
+    rng: np.random.Generator | None = None,
+) -> state.SheetStates:
+    if rng is None:
+        uniform = np.random.uniform
+        random = np.random.random
+    else:
+        uniform = rng.uniform
+        random = rng.random
     num_team0 = team1
     num_team1 = team2
     num_stones = num_team0 + num_team1
     x = np.zeros((num_sims, num_stones), dtype=float)
     y = np.empty((num_sims, num_stones), dtype=float)
 
-    angle = np.random.uniform(0.0, 2.0 * np.pi, size=(num_sims, num_stones))
-    radius = house_outer_circle_radius * np.sqrt(np.random.uniform(0.0, 1.0, size=(num_sims, num_stones)))
+    angle = uniform(0.0, 2.0 * np.pi, size=(num_sims, num_stones))
+    radius = house_outer_circle_radius * np.sqrt(uniform(0.0, 1.0, size=(num_sims, num_stones)))
 
-    version = np.random.random(size=(num_sims, num_stones)) < 0.2
+    version = random(size=(num_sims, num_stones)) < 0.2
 
     x = center_of_target_house + np.where(
-    version, -np.random.uniform(2.0, 4.0, size=(num_sims, num_stones)), radius * np.cos(angle))
-    y = np.where(version, np.random.uniform(center_line_y - 1.0, center_line_y + 1.0, size=(num_sims, num_stones)), center_line_y + radius * np.sin(angle))
+    version, -uniform(2.0, 4.0, size=(num_sims, num_stones)), radius * np.cos(angle))
+    y = np.where(version, uniform(center_line_y - 1.0, center_line_y + 1.0, size=(num_sims, num_stones)), center_line_y + radius * np.sin(angle))
 
 
     return state.SheetStates(
@@ -397,9 +408,12 @@ def _sampled_throws_and_states(
     return combine_throw_datasets(*parts)
 
 
-# 10×10×4×3 = 1200 candidates per sheet. Keep this small so tiled physics
-# (candidates × sheets) cannot allocate multi-GB collision-time matrices.
+# 8×8×4×3 grid candidates + 36×4×3 random candidates = 1200 candidates per
+# sheet. Keep this small so tiled physics (candidates × sheets) cannot allocate
+# multi-GB collision-time matrices.
 _GRID_SEARCH_SHEET_BATCH = 32
+_VALUE_GRID_SIZE = (8, 8, 4)
+_VALUE_RANDOM_THROWS = 36 * 4 * 3
 
 
 def _grid_search_throws(
@@ -408,19 +422,33 @@ def _grid_search_throws(
     rng: np.random.Generator,
     sheet_batch_size: int = _GRID_SEARCH_SHEET_BATCH,
 ) -> state.Throws:
-    policy = ArgmaxThrowPolicy.max_single_turn_score(
-        random_action_prob=0.0,
-        throw_searcher=ThrowsGridSearcher(10, 10, 4),
-    )
     n = sheet_states.x.shape[0]
-    if n <= sheet_batch_size:
-        return policy.make_throws(sheet_states, team, rng)
     parts: list[state.Throws] = []
     for start in range(0, n, sheet_batch_size):
         idx = np.arange(start, min(start + sheet_batch_size, n))
+        batch_states = state.take_sheet_states(sheet_states, idx)
+        grid_throws, grid_states = ThrowsGridSearcher(
+            *_VALUE_GRID_SIZE
+        ).get_throws_for_num_sims(team=team, sheet_states=batch_states)
+        random_throws, random_states = RandomThrows(
+            rng, _VALUE_RANDOM_THROWS
+        ).get_throws_for_num_sims(team=team, sheet_states=batch_states)
+        candidate_throws = state.concat_throws([grid_throws, random_throws])
+        candidate_states = state.concat([grid_states, random_states])
+        scores = score_throws_by_net_score(candidate_states, candidate_throws)
+        num_sims = batch_states.x.shape[0]
+        n_candidates = scores.size // num_sims
+        chosen = (
+            scores.reshape(n_candidates, num_sims).argmax(axis=0) * num_sims
+            + np.arange(num_sims)
+        )
         parts.append(
-            policy.make_throws(
-                state.take_sheet_states(sheet_states, idx), team, rng
+            state.Throws(
+                angle_deg=candidate_throws.angle_deg[chosen],
+                speed=candidate_throws.speed[chosen],
+                turn=candidate_throws.turn[chosen],
+                y_val=candidate_throws.y_val[chosen],
+                team=candidate_throws.team[chosen],
             )
         )
     return state.concat_throws(parts)
@@ -466,8 +494,9 @@ def value_network_training_data(
 ) -> TrainingData:
     """Build a V-network dataset for sheets with only the last (hammer) throw left.
 
-    Features are the input sheet (positions only). The throwing team grid-searches
-    that last throw. Labels are team-0 net score after it stops.
+    Features are the input sheet (positions only). The throwing team searches an
+    8×8×4 grid plus random throws for that last throw. Labels are team-0 net score
+    after it stops.
     """
     next_team = sheet_states.next_team_to_play()
     if not np.all(next_team == team):
@@ -487,3 +516,57 @@ def value_network_training_data(
     return curling_nn.VInputFeatures.create_score_match_dataset_from_sheet_states(
         sheet_states, final_scores, stones_per_side
     )
+
+
+def write_value_network_training_data_shards(
+    *,
+    output_dir: str,
+    team1: int,
+    team2: int,
+    team: int,
+    num_sims: int,
+    seed: int,
+    sheet_batch_size: int = 32,
+) -> list[str]:
+    """Generate value data in resumable, deterministic batches.
+
+    Existing batch files are left untouched and skipped, so rerunning this
+    function after an interrupted notebook cell resumes where it stopped.
+    """
+    if team not in (0, 1):
+        raise ValueError(f"team must be 0 or 1, got {team}")
+    if num_sims < 1 or sheet_batch_size < 1:
+        raise ValueError("num_sims and sheet_batch_size must be positive")
+
+    paths: list[str] = []
+    for batch_index, start in enumerate(range(0, num_sims, sheet_batch_size)):
+        batch_size = min(sheet_batch_size, num_sims - start)
+        name = f"value_{num_sims}_seed{seed}_batch{batch_index:06d}.npz"
+        output_path = Path(output_dir) / name
+        paths.append(str(output_path))
+        if output_path.exists():
+            continue
+
+        batch_seed = np.random.SeedSequence([seed, batch_index])
+        state_rng, search_rng = [
+            np.random.default_rng(s)
+            for s in batch_seed.spawn(2)
+        ]
+        batch_states = random_sheet_states(
+            team1=team1,
+            team2=team2,
+            num_sims=batch_size,
+            rng=state_rng,
+        )
+        last_throws = _grid_search_throws(batch_states, team, search_rng)
+        final_states = physics.run_until_stopping(
+            sheet_states=state.add_stones_from_throws(batch_states, last_throws)
+        )
+        final_scores = scoring.get_net_score_for_team(final_states, 0)
+        stones_per_side = (batch_states.x.shape[1] + 1) // 2
+        batch_data = curling_nn.VInputFeatures.create_score_match_dataset_from_sheet_states(
+            batch_states, final_scores, stones_per_side
+        )
+        dataset.write_training_data_shard(output_dir, batch_data, name=name)
+
+    return paths

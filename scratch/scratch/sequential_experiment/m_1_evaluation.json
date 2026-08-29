@@ -1,0 +1,176 @@
+{
+  "dataset_size": 2000,
+  "model_index": 1,
+  "stats": {
+    "calibration": [
+      {
+        "actual_fraction": 5.555555555555556e-05,
+        "actual_stderr": 5.5555555555555565e-05,
+        "count": 18000,
+        "lower_bound": 0.0,
+        "predicted_fraction": 3.105107588545758e-05,
+        "predicted_stderr": 2.2916027618118406e-08,
+        "upper_bound": 0.1
+      },
+      {
+        "actual_fraction": NaN,
+        "actual_stderr": NaN,
+        "count": 0,
+        "lower_bound": 0.1,
+        "predicted_fraction": NaN,
+        "predicted_stderr": NaN,
+        "upper_bound": 0.2
+      },
+      {
+        "actual_fraction": 0.271,
+        "actual_stderr": 0.00994127328148807,
+        "count": 2000,
+        "lower_bound": 0.2,
+        "predicted_fraction": 0.2701443257866511,
+        "predicted_stderr": 1.2415775098100891e-18,
+        "upper_bound": 0.3
+      },
+      {
+        "actual_fraction": NaN,
+        "actual_stderr": NaN,
+        "count": 0,
+        "lower_bound": 0.3,
+        "predicted_fraction": NaN,
+        "predicted_stderr": NaN,
+        "upper_bound": 0.4
+      },
+      {
+        "actual_fraction": NaN,
+        "actual_stderr": NaN,
+        "count": 0,
+        "lower_bound": 0.4,
+        "predicted_fraction": NaN,
+        "predicted_stderr": NaN,
+        "upper_bound": 0.5
+      },
+      {
+        "actual_fraction": NaN,
+        "actual_stderr": NaN,
+        "count": 0,
+        "lower_bound": 0.5,
+        "predicted_fraction": NaN,
+        "predicted_stderr": NaN,
+        "upper_bound": 0.6
+      },
+      {
+        "actual_fraction": NaN,
+        "actual_stderr": NaN,
+        "count": 0,
+        "lower_bound": 0.6,
+        "predicted_fraction": NaN,
+        "predicted_stderr": NaN,
+        "upper_bound": 0.7
+      },
+      {
+        "actual_fraction": 0.7285,
+        "actual_stderr": 0.009947027026872736,
+        "count": 2000,
+        "lower_bound": 0.7,
+        "predicted_fraction": 0.7295762145303796,
+        "predicted_stderr": 2.4831550196201783e-18,
+        "upper_bound": 0.8
+      },
+      {
+        "actual_fraction": NaN,
+        "actual_stderr": NaN,
+        "count": 0,
+        "lower_bound": 0.8,
+        "predicted_fraction": NaN,
+        "predicted_stderr": NaN,
+        "upper_bound": 0.9
+      },
+      {
+        "actual_fraction": NaN,
+        "actual_stderr": NaN,
+        "count": 0,
+        "lower_bound": 0.9,
+        "predicted_fraction": NaN,
+        "predicted_stderr": NaN,
+        "upper_bound": 1.0
+      }
+    ],
+    "correct_score_probability": {
+      "stderr": 0.004576920024928671,
+      "value": 0.6047053985368622
+    },
+    "negative_log_probability": {
+      "stderr": 0.011047189762155322,
+      "value": 0.5896172887151607
+    },
+    "r_squared": {
+      "stderr": 2.0494323315209953e-05,
+      "value": -2.4904045883289427e-06
+    }
+  },
+  "training": {
+    "train_loss": [
+      0.5917353216100212,
+      0.6053849031940078,
+      0.5891706913649247,
+      0.5962079435000398,
+      0.5991332855079655,
+      0.5873813335400262,
+      0.5831318051200949,
+      0.587563470751391,
+      0.5834121325016022,
+      0.5886657190886435,
+      0.5850453610812879,
+      0.582763092586453,
+      0.5833782010179357,
+      0.5875902670901231,
+      0.5926877329765091,
+      0.5883744599104481,
+      0.5827117343400903,
+      0.5827061363042899,
+      0.5826008930807232,
+      0.5827874064606077,
+      0.582882581685009,
+      0.5826215907070053,
+      0.5834409336916336,
+      0.5823798395318258,
+      0.5823259895322805,
+      0.5824246134792975,
+      0.5822305487226825,
+      0.5822666175636764,
+      0.5821783488760407,
+      0.5821723886421561
+    ],
+    "validation_loss": [
+      0.5972283936185561,
+      0.6127770940347063,
+      0.5948792614344799,
+      0.6017953567651503,
+      0.6067741156174034,
+      0.5946016142128255,
+      0.5898270934973077,
+      0.5936281522855988,
+      0.5899894811618083,
+      0.5961135619704933,
+      0.591513670492686,
+      0.5897328869706991,
+      0.5901275484747132,
+      0.5940403730380382,
+      0.59885512942657,
+      0.5960837629537166,
+      0.5899628785289674,
+      0.5899973379406017,
+      0.5896729210289406,
+      0.589880615322688,
+      0.5899866682187306,
+      0.5901272177770809,
+      0.590529096506357,
+      0.589674363416896,
+      0.5898544456612442,
+      0.5897388506207011,
+      0.5896228523018917,
+      0.5896467265696586,
+      0.5896149833526126,
+      0.5896172887151607
+    ]
+  }
+}

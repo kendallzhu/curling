@@ -88,10 +88,17 @@ def run_experiment(
     team: int,
     grid_sizes: list[tuple[int, int, int]],
     random_throws_per_state: int,
+    hierarchical_random_initial_throws: int,
+    hierarchical_random_levels: list[tuple[int, float]],
+    repulsive_random_initial_throws: int,
+    repulsive_random_levels: list[tuple[int, int]],
+    repulsive_c1: float,
+    repulsive_c2: float,
     target_trajectories: int,
     seed: int,
 ) -> tuple[
     dict[tuple[int, int, int], dict[str, Any]],
+    dict[str, Any],
     dict[str, Any],
     dict[str, Any],
     pl.DataFrame,
@@ -143,9 +150,57 @@ def run_experiment(
         "mean_number_of_random_throws_tied_for_best": np.mean(random_result["num_best"]),
         "fraction_with_multiple_best_random_throws": np.mean(random_result["num_best"] > 1),
     }
+    hierarchical_label = ", ".join(
+        f"({num_throws}, {noise_scale})"
+        for num_throws, noise_scale in hierarchical_random_levels
+    )
+    hierarchical_result = _run_search(
+        f"hierarchical random [{hierarchical_label}]",
+        sheet_states,
+        bot.HierarchicalRandomThrows(
+            rng=np.random.default_rng(seed + 2),
+            n_initial_throws=hierarchical_random_initial_throws,
+            refinement_levels=hierarchical_random_levels,
+        ),
+        team=team,
+        target_trajectories=target_trajectories,
+    )
+    hierarchical_gap = reference_best - hierarchical_result["best_scores"]
+    hierarchical_summary = {
+        "fraction_below_dense_grid": np.mean(hierarchical_gap > 0),
+        "mean_dense_minus_hierarchical_best": np.mean(hierarchical_gap),
+        "max_dense_minus_hierarchical_best": np.max(hierarchical_gap),
+        "median_number_of_hierarchical_throws_tied_for_best": np.median(
+            hierarchical_result["num_best"]
+        ),
+    }
+    repulsive_result = _run_search(
+        f"repulsive random [{repulsive_random_levels}; c1={repulsive_c1}, c2={repulsive_c2}]",
+        sheet_states,
+        bot.RepulsiveHierarchicalRandomThrows(
+            rng=np.random.default_rng(seed + 3),
+            n_initial_throws=repulsive_random_initial_throws,
+            level_configs=repulsive_random_levels,
+            c1=repulsive_c1,
+            c2=repulsive_c2,
+        ),
+        team=team,
+        target_trajectories=target_trajectories,
+    )
+    repulsive_gap = reference_best - repulsive_result["best_scores"]
+    repulsive_summary = {
+        "fraction_below_dense_grid": np.mean(repulsive_gap > 0),
+        "mean_dense_minus_repulsive_best": np.mean(repulsive_gap),
+        "max_dense_minus_repulsive_best": np.max(repulsive_gap),
+        "median_number_of_repulsive_throws_tied_for_best": np.median(
+            repulsive_result["num_best"]
+        ),
+    }
     all_results = {
         **{f"grid_{grid_size}": result for grid_size, result in grid_results.items()},
         "random": random_result,
+        "hierarchical_random": hierarchical_result,
+        "repulsive_random": repulsive_result,
     }
     all_best_scores = np.max(
         np.stack([result["best_scores"] for result in all_results.values()]), axis=0
@@ -164,12 +219,26 @@ def run_experiment(
             )
         )
     per_sim = pl.concat(rows)
-    return grid_results, random_result, {"grid": grid_summary, "random": random_summary}, per_sim
+    return (
+        grid_results,
+        random_result,
+        hierarchical_result,
+        repulsive_result,
+        {
+            "grid": grid_summary,
+            "random": random_summary,
+            "hierarchical_random": hierarchical_summary,
+            "repulsive_random": repulsive_summary,
+        },
+        per_sim,
+    )
 
 
 def plot_score_gaps(
     grid_results: dict[tuple[int, int, int], dict[str, Any]],
     random_result: dict[str, Any],
+    hierarchical_result: dict[str, Any],
+    repulsive_result: dict[str, Any],
 ):
     """Plot grid and random-search gaps relative to the densest grid."""
     # Keep Matplotlib out of the import/search path: importing pyplot can trigger
@@ -195,8 +264,26 @@ def plot_score_gaps(
         bins=np.arange(-2.5, 4.5, 1),
         color="tab:orange",
         edgecolor="white",
+        label="uniform random",
     )
-    axes[1].set(title="Dense-grid score minus random-search score", xlabel="score gap", ylabel="simulations")
+    axes[1].hist(
+        reference_best - hierarchical_result["best_scores"],
+        bins=np.arange(-2.5, 4.5, 1),
+        histtype="step",
+        linewidth=2,
+        color="tab:green",
+        label="hierarchical",
+    )
+    axes[1].hist(
+        reference_best - repulsive_result["best_scores"],
+        bins=np.arange(-2.5, 4.5, 1),
+        histtype="step",
+        linewidth=2,
+        color="tab:red",
+        label="repulsive",
+    )
+    axes[1].set(title="Dense-grid score minus random-search scores", xlabel="score gap", ylabel="simulations")
+    axes[1].legend()
     fig.tight_layout()
     return fig, axes
 

@@ -186,6 +186,28 @@ class ScoreNetwork(nn.NN):
         return weights @ score_values
 
 
+def print_trainable_parameter_info(neural_network: ScoreNetwork) -> int:
+    """Print trainable parameter shapes and return their total count."""
+    total = 0
+    print(
+        f"{type(neural_network).__name__}: "
+        f"{neural_network.num_stones} input stones, "
+        f"hidden layer size {neural_network.hidden_layer_size}"
+    )
+    for index, layer in enumerate(neural_network.linear_layers()):
+        weight_count = layer.weights.size
+        bias_count = layer.bias.size
+        layer_count = weight_count + bias_count
+        total += layer_count
+        print(
+            f"  linear layer {index}: "
+            f"weights {layer.weights.shape}, bias {layer.bias.shape}, "
+            f"parameters {layer_count}"
+        )
+    print(f"total trainable parameters: {total}")
+    return total
+
+
 class QNetwork(ScoreNetwork):
     def __init__(
         self,

@@ -265,10 +265,9 @@ def plot_calibration(
     from matplotlib import pyplot as plt
 
     calibration = model_stats.calibration
-    midpoints = np.array(
-        [(bucket.lower_bound + bucket.upper_bound) / 2 for bucket in calibration]
-    )
+    predicted = np.array([bucket.predicted_fraction for bucket in calibration])
     observed = np.array([bucket.actual_fraction for bucket in calibration])
+    predicted_stderr = np.array([bucket.predicted_stderr for bucket in calibration])
     stderr = np.array([bucket.actual_stderr for bucket in calibration])
     counts = np.array([bucket.count for bucket in calibration])
     nonempty = counts > 0
@@ -277,22 +276,23 @@ def plot_calibration(
     if ax is None:
         _, ax = plt.subplots(figsize=(7, 6))
     ax.errorbar(
-        midpoints[nonempty],
+        predicted[nonempty],
         observed[nonempty],
+        xerr=predicted_stderr[nonempty],
         yerr=stderr[nonempty],
         fmt="o",
         capsize=3,
         label="observed fraction",
     )
     ax.plot([0, 1], [0, 1], "--", color="0.5", label="perfect calibration")
-    for x, y, n in zip(midpoints[nonempty], observed[nonempty], counts[nonempty]):
+    for x, y, n in zip(predicted[nonempty], observed[nonempty], counts[nonempty]):
         ax.annotate(
             str(n), (x, y), xytext=(4, 4), textcoords="offset points", fontsize=8
         )
     ax.set(
         xlim=(0, 1),
         ylim=(0, 1),
-        xlabel="predicted probability bucket",
+        xlabel="predicted fraction",
         ylabel="observed event fraction",
         title=title,
     )
