@@ -10,6 +10,15 @@ def assert_allclose(actual, expected, *, rtol=RTOL, atol=ATOL):
     np.testing.assert_allclose(actual, expected, rtol=rtol, atol=atol)
 
 
+def test_softmax_is_stable_for_large_logits():
+    logits = np.array([[[1000.0], [1001.0], [999.0]]])
+
+    probabilities = nn.softmax(logits)
+
+    assert np.isfinite(probabilities).all()
+    assert_allclose(probabilities.sum(axis=1), np.ones((1, 1)))
+
+
 def test_train_updates_linear_weights_using_average_gradient():
     model = nn.NN([nn.Linear(np.array([[2.0, -1.0]]))])
     batch = nn.TrainingBatch(

@@ -6,8 +6,34 @@ import data_generation
 import dataset
 import physics
 import scoring
-from constants import center_line_y, center_of_target_house
+from constants import NOT_IN_PLAY_X, center_line_y, center_of_target_house
 from state import SheetStates, Velocities, add_stones_from_throws
+
+
+def test_physics_ignores_not_in_play_placeholder_stones():
+    board = SheetStates(
+        first_team=np.array([0]),
+        x=np.array([[NOT_IN_PLAY_X, NOT_IN_PLAY_X]]),
+        y=np.array([[NOT_IN_PLAY_X, NOT_IN_PLAY_X]]),
+        velocities=Velocities(
+            v=np.zeros((1, 2)), theta=np.zeros((1, 2))
+        ),
+        rotation_directions=np.zeros((1, 2), dtype=int),
+    )
+    thrown = add_stones_from_throws(
+        board,
+        bot.Throws(
+            angle_deg=np.array([0.0]), speed=np.array([2.2]),
+            turn=np.array([0]), y_val=np.array([center_line_y]),
+            team=np.array([0]),
+        ),
+    )
+
+    final = physics.run_until_stopping(sheet_states=thrown)
+
+    assert np.all(final.x[0, :2] == NOT_IN_PLAY_X)
+    assert final.x[0, 2] > NOT_IN_PLAY_X
+    assert np.all(final.velocities.v == 0)
 
 
 def test_sample_throws_by_score_on_enemy_button_with_friend_in_house():
@@ -84,4 +110,3 @@ def test_get_throw_v_argmax_only_when_one_stone_short_of_v():
     assert throw is not None
     assert throw.team == 1
     assert score is not None
-

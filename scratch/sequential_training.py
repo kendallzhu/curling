@@ -10,7 +10,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass
 import json
 from pathlib import Path
-from typing import Mapping
+from typing import Callable, Mapping
 
 import numpy as np
 
@@ -23,6 +23,70 @@ import scoring
 import state
 import stats
 from bot import RandomThrows, ThrowSearcher, ThrowsGridSearcher
+
+
+RandomSheetStates = Callable[..., state.SheetStates]
+DatasetProgressCallback = Callable[["SequentialDataset", int], None]
+
+
+def _legacy_random_sheet_states(
+    *, turn: int, num_sims: int, rng: np.random.Generator
+) -> state.SheetStates:
+    return data_generation.random_sheet_states(
+        team1=(turn + 1) // 2, team2=turn // 2, num_sims=num_sims, rng=rng
+    )
+
+
+@dataclass(frozen=True)
+class ExperimentSetup:
+    random_sheet_states: RandomSheetStates
+    searcher: ThrowSearcher
+    model_comparison_searcher: ThrowSearcher
+    greedy_comparison_searcher: ThrowSearcher
+
+
+def show_state_generator_versions() -> None:
+    """Print the available training-state distributions and their meanings."""
+    print("Available state generator versions:")
+    print("  legacy_full: place exactly the expected number of live stones")
+    print("               for the requested turn (the original behavior).")
+    print("  turn_based:  simulate alternating throws, including stones")
+    print("               removed by earlier throws (more realistic boards).")
+
+
+def make_experiment_setup(state_generator_version: str, *, seed: int = 0) -> ExperimentSetup:
+    """Build the standard generators and searchers for an experiment.
+
+    ``state_generator_version`` selects the distribution used for boards at
+    the beginning of each generated training example:
+
+    * ``"legacy_full"``: place exactly the expected number of live stones
+      for the requested turn.  This is the original behavior and is useful
+      for reproducing older experiments.
+    * ``"turn_based"``: simulate the requested number of alternating throws,
+      including the possibility that earlier stones were removed.  The
+      resulting board can therefore contain fewer live stones than throws
+      that have occurred, making it a more realistic mid-end distribution.
+
+    The value is intentionally explicit so experiment configuration and
+    results can record which state distribution was used.
+    """
+    if state_generator_version == "legacy_full":
+        random_sheet_states = _legacy_random_sheet_states
+    elif state_generator_version == "turn_based":
+        random_sheet_states = data_generation.generate_random_sheet_state_for_turn
+    else:
+        raise ValueError(
+            "state_generator_version must be 'legacy_full' or 'turn_based'"
+        )
+    return ExperimentSetup(
+        random_sheet_states=random_sheet_states,
+        searcher=make_default_throw_searcher(seed),
+        model_comparison_searcher=ThrowsGridSearcher(10, 10, 4),
+        greedy_comparison_searcher=GridAndRandomThrowSearcher(
+            np.random.default_rng(seed), grid_size=(10, 10, 4)
+        ),
+    )
 
 
 def feature_width(max_stones: int) -> int:
@@ -440,6 +504,10 @@ def generate_dataset(
     i: int, *, num_rows: int = 10_000, N: int = 5, seed: int = 0,
     models=None, searcher=None, batch_size: int = 32,
     shard_dir: str | Path | None = None, shard_size: int = 500,
+    random_sheet_states: RandomSheetStates | None = None,
+    diagnostic_callback: DatasetProgressCallback | None = None,
+    diagnostic_train_sizes: tuple[int, ...] = (),
+    diagnostic_evaluation_size: int = 1000,
 ) -> SequentialDataset:
     max_stones = 2 * N
     if not 1 <= i < max_stones:
@@ -448,11 +516,19 @@ def generate_dataset(
         raise ValueError("models m_(i+1)..m_(2N-1) are required")
     if shard_size < 1:
         raise ValueError("shard_size must be positive")
+    if diagnostic_evaluation_size < 1:
+        raise ValueError("diagnostic_evaluation_size must be positive")
+    if any(size < 1 for size in diagnostic_train_sizes):
+        raise ValueError("diagnostic_train_sizes must contain positive sizes")
+    if tuple(sorted(set(diagnostic_train_sizes))) != diagnostic_train_sizes:
+        raise ValueError("diagnostic_train_sizes must be sorted and contain no duplicates")
     rng = np.random.default_rng(seed)
     searcher = searcher or GridAndRandomThrowSearcher(rng)
+    random_sheet_states = random_sheet_states or _legacy_random_sheet_states
     parts_states, parts_scores = [], []
     pending_states, pending_scores = [], []
     next_shard = 0
+    next_diagnostic = 0
 
     def flush_shard(*, final: bool = False) -> None:
         nonlocal pending_states, pending_scores, next_shard
@@ -485,7 +561,7 @@ def generate_dataset(
     team1 = i // 2
     for start in range(0, num_rows, batch_size):
         count = min(batch_size, num_rows - start)
-        initial = data_generation.random_sheet_states(team1=team0, team2=team1, num_sims=count, rng=rng)
+        initial = random_sheet_states(turn=i, num_sims=count, rng=rng)
         final, scores = rollout_to_terminal(initial, models or {}, max_stones, searcher)
         parts_states.append(initial)
         parts_scores.append(scores)
@@ -493,7 +569,31 @@ def generate_dataset(
         pending_scores.append(scores)
         if sum(part.x.shape[0] for part in pending_states) >= shard_size:
             flush_shard()
+        if diagnostic_callback is not None:
+            generated_rows = sum(part.x.shape[0] for part in parts_states)
+            while (
+                next_diagnostic < len(diagnostic_train_sizes)
+                and generated_rows
+                >= diagnostic_evaluation_size + diagnostic_train_sizes[next_diagnostic]
+            ):
+                train_size = diagnostic_train_sizes[next_diagnostic]
+                diagnostic_size = diagnostic_evaluation_size + train_size
+                generated_states = state.concat(parts_states)
+                diagnostic_callback(
+                    SequentialDataset(
+                        state.take_sheet_states(
+                            generated_states, np.arange(diagnostic_size)
+                        ),
+                        np.concatenate(parts_scores)[:diagnostic_size],
+                        max_stones,
+                        N,
+                    ),
+                    train_size,
+                )
+                next_diagnostic += 1
     flush_shard(final=True)
+    if diagnostic_callback is not None and next_diagnostic != len(diagnostic_train_sizes):
+        raise ValueError("diagnostic_train_sizes cannot exceed num_rows")
     return SequentialDataset(state.concat(parts_states), np.concatenate(parts_scores), max_stones, N)
 
 
@@ -559,17 +659,232 @@ def compare_policies(
     return PolicyComparison(sheet_states, model_scores, greedy_scores, model_throw, greedy_throw)
 
 
-def generate_final_dataset(models, *, k: int, fractions: Mapping[int, float], num_rows: int = 10_000, N: int = 5, seed: int = 0) -> dataset.TrainingData:
+def print_policy_comparison(
+    i: int,
+    *,
+    artifact_dir: str | Path,
+    models,
+    random_sheet_states: RandomSheetStates,
+    greedy_comparison_searcher: ThrowSearcher,
+    model_comparison_searcher: ThrowSearcher,
+    max_stones: int,
+    num_sims: int = 5,
+) -> PolicyComparison:
+    """Compare and persist model and greedy policies for one model index."""
+    if num_sims < 1:
+        raise ValueError("num_sims must be positive")
+    states = random_sheet_states(
+        turn=i - 1, num_sims=num_sims, rng=np.random.default_rng(i)
+    )
+    comparison = compare_policies(
+        i,
+        states,
+        models,
+        max_stones=max_stones,
+        searcher=greedy_comparison_searcher,
+        model_searcher=model_comparison_searcher,
+    )
+    print(i, policy_summary(comparison))
+    write_policy_comparison(
+        Path(artifact_dir) / f"policy_comparison_{i}.npz", comparison
+    )
+    return comparison
+
+
+def train_diagnostic_model(
+    generated: SequentialDataset,
+    *,
+    train_size: int,
+    evaluation_size: int = 1000,
+    model_index: int,
+    output_dir: str | Path,
+    num_bootstrap_samples: int = 1000,
+) -> dict:
+    """Train and persist one model on a prefix after a fixed evaluation prefix."""
+    if evaluation_size < 1 or train_size < 1:
+        raise ValueError("evaluation_size and train_size must be positive")
+    if evaluation_size + train_size > generated.final_scores.size:
+        raise ValueError("generated data is too small for the diagnostic split")
+
+    evaluation = padded_training_data(
+        state.take_sheet_states(generated.sheet_states, np.arange(evaluation_size)),
+        generated.final_scores[:evaluation_size],
+        generated.max_stones,
+        generated.num_stones_per_side,
+    )
+    training = padded_training_data(
+        state.take_sheet_states(
+            generated.sheet_states,
+            np.arange(evaluation_size, evaluation_size + train_size),
+        ),
+        generated.final_scores[evaluation_size : evaluation_size + train_size],
+        generated.max_stones,
+        generated.num_stones_per_side,
+    )
+    model, normalizer, training_info, _ = train_model_with_validation(
+        training,
+        evaluation,
+        seed=model_index,
+        max_stones=generated.max_stones,
+        num_stones_per_side=generated.num_stones_per_side,
+    )
+    model_stats = evaluate_model(
+        model,
+        normalizer,
+        evaluation,
+        N=generated.num_stones_per_side,
+        num_bootstrap_samples=num_bootstrap_samples,
+        seed=model_index,
+    )
+    record = {
+        "model_index": model_index,
+        "evaluation_size": evaluation_size,
+        "train_size": train_size,
+        "training_dataset_size": training.size(),
+        "stats": {
+            "r_squared": asdict(model_stats.r_squared),
+            "negative_log_probability": asdict(model_stats.negative_log_probability),
+        },
+        "training": training_info,
+    }
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    write_model(output_dir / f"m_{model_index}_{train_size}.npz", model, normalizer)
+    with (output_dir / f"m_{model_index}_stats.jsonl").open("a") as stats_file:
+        stats_file.write(json.dumps(record, sort_keys=True) + "\n")
+    print(
+        f"diagnostic m_{model_index} train={train_size}: "
+        f"R²={model_stats.r_squared.value:.3f}, "
+        f"-log P(actual)={model_stats.negative_log_probability.value:.3f}"
+    )
+    return record
+
+
+def _default_diagnostic_train_sizes(rows_per_model: int) -> tuple[int, ...]:
+    """Return 1000, 2000, 4000, ... sizes that fit after the eval prefix."""
+    sizes = []
+    size = 1000
+    while 1000 + size <= rows_per_model:
+        sizes.append(size)
+        size *= 2
+    return tuple(sizes)
+
+
+@dataclass
+class SequentialTrainingRun:
+    models: dict
+    datasets: dict[int, SequentialDataset]
+    validation_datasets: dict[int, dataset.TrainingData]
+    training_info: dict
+
+
+def train_sequential_models(
+    *, N: int, rows_per_model: int, artifact_dir: str | Path,
+    resume_from: int | None, training_stages: int,
+    experiment: ExperimentSetup,
+    diagnostic_output_dir: str | Path | None = None,
+    policy_comparison_num_sims: int = 5,
+) -> SequentialTrainingRun:
+    """Train, save, and evaluate the sequential model chain."""
+    artifact_dir = Path(artifact_dir)
+    max_stones = 2 * N
+    if training_stages < 1 or training_stages > max_stones - 1:
+        raise ValueError("training_stages must be between 1 and 2N-1")
+    if policy_comparison_num_sims < 1:
+        raise ValueError("policy_comparison_num_sims must be positive")
+    models, datasets, validation_datasets, training_info = {}, {}, {}, {}
+    first_model = max_stones - 1 if resume_from is None else resume_from
+    last_model = max(1, first_model - training_stages + 1)
+
+    if resume_from is not None:
+        for i in range(resume_from + 1, max_stones):
+            if i == max_stones - 1:
+                generated = load_sequential_dataset(artifact_dir / f"D_{i}.npz")
+                data = generated.training_data()
+                model, normalizer, info, validation = train_model(
+                    data, seed=i, max_stones=max_stones, num_stones_per_side=N
+                )
+                datasets[i], validation_datasets[i] = generated, validation
+                models[i], training_info[i] = (model, normalizer), info
+                write_model(artifact_dir / f"m_{i}.npz", model, normalizer)
+                save_model_evaluation(
+                    artifact_dir / f"m_{i}_evaluation.json", model=model,
+                    normalizer=normalizer, data=validation,
+                    training_info=info, model_index=i, N=N
+                )
+                print_policy_comparison(
+                    i, artifact_dir=artifact_dir, models=models,
+                    random_sheet_states=experiment.random_sheet_states,
+                    greedy_comparison_searcher=experiment.greedy_comparison_searcher,
+                    model_comparison_searcher=experiment.model_comparison_searcher,
+                    max_stones=max_stones,
+                    num_sims=policy_comparison_num_sims,
+                )
+            else:
+                models[i] = load_model(artifact_dir / f"m_{i}.npz")
+                evaluation_path = artifact_dir / f"m_{i}_evaluation.json"
+                if evaluation_path.exists():
+                    training_info[i] = json.loads(evaluation_path.read_text())
+
+    for i in range(first_model, last_model - 1, -1):
+        diagnostic_sizes = (
+            _default_diagnostic_train_sizes(rows_per_model)
+            if diagnostic_output_dir is not None
+            else ()
+        )
+
+        def diagnostic_callback(generated, train_size, model_index=i):
+            train_diagnostic_model(
+                generated,
+                train_size=train_size,
+                model_index=model_index,
+                output_dir=diagnostic_output_dir,
+            )
+
+        generated = generate_dataset(
+            i, num_rows=rows_per_model, N=N, seed=i, models=models,
+            searcher=experiment.searcher, shard_dir=artifact_dir / f"D_{i}",
+            shard_size=500, random_sheet_states=experiment.random_sheet_states,
+            diagnostic_callback=diagnostic_callback if diagnostic_sizes else None,
+            diagnostic_train_sizes=diagnostic_sizes,
+        )
+        data = generated.training_data()
+        model, normalizer, info, validation = train_model(
+            data, seed=i, max_stones=max_stones, num_stones_per_side=N
+        )
+        datasets[i], validation_datasets[i] = generated, validation
+        models[i], training_info[i] = (model, normalizer), info
+        write_sequential_dataset(artifact_dir / f"D_{i}.npz", generated)
+        write_model(artifact_dir / f"m_{i}.npz", model, normalizer)
+        save_model_evaluation(
+            artifact_dir / f"m_{i}_evaluation.json", model=model,
+            normalizer=normalizer, data=validation,
+            training_info=info, model_index=i, N=N
+        )
+        print_policy_comparison(
+            i, artifact_dir=artifact_dir, models=models,
+            random_sheet_states=experiment.random_sheet_states,
+            greedy_comparison_searcher=experiment.greedy_comparison_searcher,
+            model_comparison_searcher=experiment.model_comparison_searcher,
+            max_stones=max_stones,
+            num_sims=policy_comparison_num_sims,
+        )
+    print(f"trained {len(models)} models")
+    return SequentialTrainingRun(models, datasets, validation_datasets, training_info)
+
+
+def generate_final_dataset(models, *, k: int, fractions: Mapping[int, float], num_rows: int = 10_000, N: int = 5, seed: int = 0, random_sheet_states: RandomSheetStates | None = None) -> dataset.TrainingData:
     max_stones = 2 * N
     counts = list(range(k, max_stones))
     if set(fractions) != set(counts) or any(v < 0 for v in fractions.values()) or not np.isclose(sum(fractions.values()), 1):
         raise ValueError("fractions must cover k..2N-1 and sum to one")
     raw_parts, answer_parts = [], []
     rng = np.random.default_rng(seed)
+    random_sheet_states = random_sheet_states or _legacy_random_sheet_states
     raw_counts = np.floor(np.asarray([fractions[n] for n in counts]) * num_rows).astype(int)
     raw_counts[-1] += num_rows - int(raw_counts.sum())
     for n, count in zip(counts, raw_counts):
-        states = data_generation.random_sheet_states(team1=(n + 1) // 2, team2=n // 2, num_sims=int(count), rng=rng)
+        states = random_sheet_states(turn=n, num_sims=int(count), rng=rng)
         model, normalizer = models[n]
         raw_parts.append(raw_padded_sheet_state_features(states, max_stones))
         answer_parts.append(probabilities(model, normalizer, states, max_stones))

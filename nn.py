@@ -354,7 +354,11 @@ class CrossEntropyLoss:
 
 
 def softmax(x):
-    return np.exp(x) / np.exp(x).sum(axis=1).reshape((x.shape[0], 1, 1))
+    # Subtracting the row maximum leaves softmax unchanged and prevents
+    # overflow when logits become large during training.
+    shifted = x - np.max(x, axis=1, keepdims=True)
+    exponentials = np.exp(shifted)
+    return exponentials / exponentials.sum(axis=1, keepdims=True)
 
 class SoftmaxCrossEntropyLoss:
     # (n_batch, n_out) -> n_batch

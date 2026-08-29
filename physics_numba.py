@@ -2,6 +2,7 @@ import numpy as np
 from numba import njit, prange
 
 from constants import (
+    NOT_IN_PLAY_X,
     STONE_RADIUS_M,
     STONE_INNER_RING_RADIUS_M,
     g,
@@ -87,6 +88,12 @@ def _compute_all_pair_times(x, y, v, cos_t, sin_t, ii, jj):
             v2 = v[s, i]
             c2 = cos_t[s, i]
             s2 = sin_t[s, i]
+
+            # Inactive stones are retained as placeholder columns in the
+            # vectorized state layout and must not participate in collisions.
+            if x1 == NOT_IN_PLAY_X or x2 == NOT_IN_PLAY_X:
+                t_pairs[s, p] = np.inf
+                continue
 
             dx = x1 - x2
             dy = y1 - y2

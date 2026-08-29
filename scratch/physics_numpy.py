@@ -2,6 +2,7 @@ import copy
 import numpy as np
 
 from constants import (
+    NOT_IN_PLAY_X,
     STONE_RADIUS_M,
     STONE_INNER_RING_RADIUS_M,
     g,
@@ -83,7 +84,10 @@ def separate_overlapping_stones(sheet_states: SheetStates) -> SheetStates:
             (sheet_states.x[:, i] - sheet_states.x[:, j]) ** 2
             + (sheet_states.y[:, i] - sheet_states.y[:, j]) ** 2
         )
-        overlap = distance <= 2 * R
+        active = (sheet_states.x[:, i] != NOT_IN_PLAY_X) & (
+            sheet_states.x[:, j] != NOT_IN_PLAY_X
+        )
+        overlap = (distance <= 2 * R) & (distance > 0) & active
         if overlap.sum() == 0:
             if j < i - 1:
                 j += 1
@@ -171,6 +175,8 @@ def run_to_next_collision_or_stop(
             time_to_collision = np.fmin(
                 time_to_collision_linear, np.fmax(time_to_collision_lbound, 0.1)
             )
+            inactive = (x[:, j] == NOT_IN_PLAY_X) | (x[:, i] == NOT_IN_PLAY_X)
+            time_to_collision = np.where(inactive, np.inf, time_to_collision)
             first_collision_index = np.where(
                 time_to_collision < next_collision_time, j, first_collision_index
             )

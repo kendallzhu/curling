@@ -35,6 +35,9 @@ class NeuralNetStats:
     calibration: tuple[CalibrationBucket, ...]
     negative_log_probability: Estimate
 
+    def __str__(self) -> str:
+        return _format_stats(self)
+
 
 def _standard_error(values: np.ndarray) -> float:
     if values.size < 2:
@@ -244,16 +247,31 @@ create_stats_dataframe = create_prediction_dataframe
 compute_neural_net_stats = compute_stats
 
 
+def _format_number(value: float, digits: int) -> str:
+    formatted = f"{value:.{digits}f}"
+    if formatted.startswith("-0"):
+        return "-" + formatted[2:]
+    if formatted.startswith("0"):
+        return formatted[1:]
+    return formatted
+
+
+def _format_estimate(estimate: Estimate) -> str:
+    return f"{_format_number(estimate.value, 3)} ± {_format_number(estimate.stderr, 4)}"
+
+
+def _format_stats(model_stats: NeuralNetStats) -> str:
+    return "\n".join(
+        (
+            f"r² = {_format_estimate(model_stats.r_squared)}",
+            f"P(correct score) = {_format_estimate(model_stats.correct_score_probability)}",
+            f"NLL = {_format_estimate(model_stats.negative_log_probability)}",
+        )
+    )
+
+
 def print_stats(model_stats: NeuralNetStats) -> None:
-    print(
-        f"expected-score R²: {model_stats.r_squared.value:.3f} ± {model_stats.r_squared.stderr:.3f}"
-    )
-    print(
-        f"P(actual score): {model_stats.correct_score_probability.value:.3f} ± {model_stats.correct_score_probability.stderr:.3f}"
-    )
-    print(
-        f"negative log P(actual): {model_stats.negative_log_probability.value:.3f} ± {model_stats.negative_log_probability.stderr:.3f}"
-    )
+    print(_format_stats(model_stats))
 
 
 def plot_calibration(
@@ -318,6 +336,66 @@ def plot_training_losses(losses, val_losses, *, ax=None):
     if created_fig:
         plt.show()
     return ax
+
+
+def plot_calibration_and_training_losses(
+    model_stats: NeuralNetStats,
+    losses,
+    validation_losses,
+    *,
+    diagnostic_records=None,
+    title: str = "Model evaluation",
+):
+    """Plot calibration, training loss, and optional diagnostic snapshots."""
+    from matplotlib import pyplot as plt
+
+    num_plots = 3 if diagnostic_records is not None else 2
+    _, axs = plt.subplots(
+        1, num_plots, figsize=(5.5 * num_plots, 4.5), constrained_layout=True
+    )
+    axs = np.atleast_1d(axs)
+    plot_calibration(model_stats, ax=axs[0], title="Calibration")
+
+    losses = np.asarray(losses, dtype=float)
+    validation_losses = np.asarray(validation_losses, dtype=float)
+    if losses.size != validation_losses.size:
+        raise ValueError("train and validation losses must have the same length")
+    epochs = np.arange(1, losses.size + 1)
+    axs[1].plot(epochs, losses, label="train")
+    axs[1].plot(epochs, validation_losses, label="validation")
+    axs[1].set(
+        xlabel="epoch",
+        ylabel="cross-entropy loss",
+        title="Training loss",
+    )
+    axs[1].grid(alpha=0.25)
+    axs[1].legend()
+    if diagnostic_records is not None:
+        train_sizes = np.array([record["train_size"] for record in diagnostic_records])
+        nll = np.array([
+            record["stats"]["negative_log_probability"]["value"]
+            for record in diagnostic_records
+        ])
+        nll_stderr = np.array([
+            record["stats"]["negative_log_probability"]["stderr"]
+            for record in diagnostic_records
+        ])
+        order = np.argsort(train_sizes)
+        axs[2].errorbar(
+            train_sizes[order], nll[order], yerr=nll_stderr[order],
+            fmt="o-", capsize=3,
+        )
+        axs[2].set(
+            xlabel="diagnostic training examples",
+            ylabel="evaluation cross-entropy loss",
+            title="Diagnostic snapshots",
+        )
+        axs[2].grid(alpha=0.25)
+    if title:
+        fig = axs[0].figure
+        fig.suptitle(title)
+    plt.show()
+    return axs
 
 
 def plot_score_heatmaps(predicted_probabilities, answers, *, n: int = 40, axs=None):

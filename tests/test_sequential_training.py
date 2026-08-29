@@ -1,7 +1,17 @@
+import json
+
 import numpy as np
 
 import data_generation
 from scratch import sequential_training as sequential
+
+
+def test_show_state_generator_versions(capsys):
+    sequential.show_state_generator_versions()
+    output = capsys.readouterr().out
+    assert "legacy_full" in output
+    assert "turn_based" in output
+    assert "removed" in output
 
 
 def test_padded_features_have_fixed_width_and_one_hot_throw_flags():
@@ -78,11 +88,41 @@ def test_default_throw_searcher_combines_grid_and_random_candidates():
     assert tiled_states.x.shape[0] == throws.angle_deg.size
 
 
-def test_dataset_generation_writes_500_game_shards(tmp_path):
-    result = sequential.generate_dataset(
-        1, num_rows=501, N=1, seed=0, batch_size=32,
-        shard_dir=tmp_path, shard_size=500,
+def test_dataset_generation_reports_diagnostic_checkpoints(tmp_path):
+    checkpoints = []
+
+    def callback(data, train_size):
+        checkpoints.append((data.final_scores.size, train_size))
+
+    sequential.generate_dataset(
+        1,
+        num_rows=4,
+        N=1,
+        seed=0,
+        batch_size=2,
+        shard_dir=tmp_path,
+        diagnostic_callback=callback,
+        diagnostic_train_sizes=(1, 2),
+        diagnostic_evaluation_size=1,
     )
-    shards = sorted(tmp_path.glob("D_1_batch*.npz"))
-    assert [sequential.load_sequential_dataset(path).final_scores.size for path in shards] == [500, 1]
-    assert result.final_scores.size == 501
+
+    assert checkpoints == [(2, 1), (3, 2)]
+
+
+def test_diagnostic_jsonl_reports_training_dataset_size(tmp_path):
+    states = data_generation.random_sheet_states(team1=1, team2=0, num_sims=2)
+    generated = sequential.SequentialDataset(states, np.array([-1, 1]), 2, 1)
+
+    record = sequential.train_diagnostic_model(
+        generated,
+        train_size=1,
+        evaluation_size=1,
+        model_index=1,
+        output_dir=tmp_path,
+        num_bootstrap_samples=1,
+    )
+
+    assert record["training_dataset_size"] == 1
+    lines = (tmp_path / "m_1_stats.jsonl").read_text().splitlines()
+    assert len(lines) == 1
+    assert json.loads(lines[0])["training_dataset_size"] == 1

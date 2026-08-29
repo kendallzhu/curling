@@ -70,6 +70,55 @@ def test_integer_score_labels_are_supported():
     assert result.correct_score_probability.value > 0.9
 
 
+def test_stats_have_compact_human_readable_text():
+    result = stats.NeuralNetStats(
+        r_squared=stats.Estimate(0.428296, 0.001214),
+        correct_score_probability=stats.Estimate(0.383998, 0.009516),
+        calibration=(),
+        negative_log_probability=stats.Estimate(1.325306, 0.047048),
+    )
+    assert str(result) == (
+        "r² = .428 ± .0012\n"
+        "P(correct score) = .384 ± .0095\n"
+        "NLL = 1.325 ± .0470"
+    )
+
+
+def test_combined_stats_plot_has_calibration_and_loss_panels():
+    matplotlib = pytest.importorskip("matplotlib")
+    matplotlib.use("Agg")
+    result = stats.NeuralNetStats(
+        stats.Estimate(0.4, 0.01), stats.Estimate(0.5, 0.02),
+        (stats.CalibrationBucket(0, 1, 2, 0.5, 0.1, 0.5, 0.1),),
+        stats.Estimate(1.0, 0.1),
+    )
+    axes = stats.plot_calibration_and_training_losses(
+        result, [1.0, 0.8], [1.1, 0.9]
+    )
+    assert len(axes) == 2
+    assert axes[1].get_xlabel() == "epoch"
+    matplotlib.pyplot.close(axes[0].figure)
+
+
+def test_combined_stats_plot_can_include_diagnostic_snapshots():
+    matplotlib = pytest.importorskip("matplotlib")
+    matplotlib.use("Agg")
+    result = stats.NeuralNetStats(
+        stats.Estimate(0.4, 0.01), stats.Estimate(0.5, 0.02),
+        (stats.CalibrationBucket(0, 1, 2, 0.5, 0.1, 0.5, 0.1),),
+        stats.Estimate(1.0, 0.1),
+    )
+    axes = stats.plot_calibration_and_training_losses(
+        result, [1.0], [1.1], diagnostic_records=[{
+            "train_size": 10,
+            "stats": {"negative_log_probability": {"value": 1.0, "stderr": 0.1}},
+        }]
+    )
+    assert len(axes) == 3
+    assert axes[2].get_ylabel() == "evaluation cross-entropy loss"
+    matplotlib.pyplot.close(axes[0].figure)
+
+
 def test_stats_fail_with_example_when_probabilities_do_not_sum_to_one(monkeypatch):
     original_softmax = stats.nn.softmax
 
