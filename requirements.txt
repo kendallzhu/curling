@@ -45,6 +45,7 @@ Pygments==2.20.0
 pyparsing==3.3.2
 pyright==1.1.409
 pytest==9.0.3
+inline-snapshot==0.35.4
 python-dateutil==2.9.0.post0
 python-discovery==1.2.2
 PyYAML==6.0.3

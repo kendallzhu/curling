@@ -59,6 +59,22 @@
         "/^cd /home/kzhu/curling && \\./venv/bin/python -m py_compile curling_nn\\.py$/": {
             "approve": true,
             "matchCommandLine": true
+        },
+        "/^\\.venv/bin/python -m pytest -q tests/test_data_generation\\.py$/": {
+            "approve": true,
+            "matchCommandLine": true
+        },
+        "/^venv/bin/python -m pytest -q tests/test_data_generation\\.py$/": {
+            "approve": true,
+            "matchCommandLine": true
+        },
+        "/^venv/bin/python -m pytest -q tests/test_data_generation\\.py --inline-snapshot=create$/": {
+            "approve": true,
+            "matchCommandLine": true
+        },
+        "/^venv/bin/python -m pytest -q tests/test_data_generation\\.py --inline-snapshot=fix$/": {
+            "approve": true,
+            "matchCommandLine": true
         }
     },
     "python.testing.pytestArgs": [

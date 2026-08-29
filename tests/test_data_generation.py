@@ -1,7 +1,9 @@
 import numpy as np
+from inline_snapshot import snapshot
 
 from constants import center_of_target_house
 from data_generation import (
+    generate_random_sheet_state_for_turn,
     q_network_training_data,
     random_sheet_states,
     value_network_training_data,
@@ -30,6 +32,56 @@ def test_random_sheet_states_guard_stones_are_outside_house():
     guard_mask = x < center_of_target_house - 2.0
     assert np.any(guard_mask)
     assert np.all((y[guard_mask] >= 2.5 - 1.0) & (y[guard_mask] <= 2.5 + 1.0))
+
+
+def test_generate_random_sheet_state_for_turn_zero_is_empty():
+    sheet_states = generate_random_sheet_state_for_turn(
+        turn=0, num_sims=4, rng=np.random.default_rng(0)
+    )
+    assert sheet_states.x.shape == (4, 0)
+
+
+def test_generate_random_sheet_state_for_turn_rejects_negative_turn():
+    try:
+        generate_random_sheet_state_for_turn(turn=-1, rng=np.random.default_rng(0))
+    except ValueError:
+        return
+    assert False, "expected ValueError for negative turn"
+
+
+def test_generate_random_sheet_state_for_turn_stays_within_stones_thrown():
+    rng = np.random.default_rng(1)
+    for turn in range(8):
+        sheet_states = generate_random_sheet_state_for_turn(turn=turn, rng=rng)
+        assert 0 <= sheet_states.x.shape[1] <= turn
+
+
+def test_generate_random_sheet_state_for_turn_same_seed_is_reproducible():
+    # Same seed sequence must give byte-identical output; no hardcoded
+    # magic numbers, so this can't go flaky if the process model changes.
+    counts_a = [
+        generate_random_sheet_state_for_turn(
+            turn=turn, rng=np.random.default_rng(7)
+        ).x.shape[1]
+        for turn in range(8)
+    ]
+    counts_b = [
+        generate_random_sheet_state_for_turn(
+            turn=turn, rng=np.random.default_rng(7)
+        ).x.shape[1]
+        for turn in range(8)
+    ]
+    assert counts_a == counts_b
+
+
+def test_generate_random_sheet_state_for_turn_stone_count_snapshot():
+    # Regenerate with: venv/bin/python -m pytest --inline-snapshot=fix <this file>
+    rng = np.random.default_rng(123)
+    counts = [
+        generate_random_sheet_state_for_turn(turn=turn, rng=rng).x.shape[1]
+        for turn in range(10)
+    ]
+    assert counts == snapshot([0, 1, 1, 2, 2, 3, 4, 3, 2, 4])
 
 
 def test_q_network_training_data_random_throws_only():

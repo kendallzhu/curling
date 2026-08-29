@@ -63,6 +63,40 @@ def random_sheet_states(
     )
 
 
+# Simple process model for a mid-turn board: each throw so far adds one
+# stone, with a small chance that throw is later knocked out of play (and a
+# smaller chance the knockout takes two stones with it).
+_TURN_REMOVE_PROB = 0.5
+_TURN_REMOVE_TWO_PROB = 0.15
+
+
+def generate_random_sheet_state_for_turn(
+    *, turn: int, num_sims: int = 1, rng: np.random.Generator
+) -> state.SheetStates:
+    """Generate a random board representative of a given turn in an end.
+
+    Unlike ``random_sheet_states``, which always fills every requested stone,
+    this simulates ``turn`` throws, alternating the throwing team, where each
+    throw adds a stone for the thrower and may knock out one or two of the
+    opponent's stones. The whole batch shares one sampled stone count/split,
+    matching the fixed ``(num_sims, num_stones)`` layout used elsewhere.
+    """
+    if turn < 0:
+        raise ValueError(f"turn must be >= 0, got {turn}")
+
+    team_counts = [0, 0]
+    for i in range(turn):
+        thrower = i % 2
+        team_counts[thrower] += 1
+        if rng.random() < _TURN_REMOVE_PROB:
+            opponent = 1 - thrower
+            remove_count = 2 if rng.random() < _TURN_REMOVE_TWO_PROB else 1
+            team_counts[opponent] = max(0, team_counts[opponent] - remove_count)
+
+    team0, team1 = team_counts
+    return random_sheet_states(team1=team0, team2=team1, num_sims=num_sims)
+
+
 def scoring_function_of_nn(
     neural_network: curling_nn.QNetwork,
     normalizer: Normalizer,
