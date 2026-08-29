@@ -16,6 +16,10 @@ import bot
 import physics
 import scoring
 import state
+from scratch.throw_searchers import (
+    HierarchicalRandomThrows,
+    RepulsiveHierarchicalRandomThrows,
+)
 
 
 def _score_search_in_batches(
@@ -157,7 +161,7 @@ def run_experiment(
     hierarchical_result = _run_search(
         f"hierarchical random [{hierarchical_label}]",
         sheet_states,
-        bot.HierarchicalRandomThrows(
+        HierarchicalRandomThrows(
             rng=np.random.default_rng(seed + 2),
             n_initial_throws=hierarchical_random_initial_throws,
             refinement_levels=hierarchical_random_levels,
@@ -177,7 +181,7 @@ def run_experiment(
     repulsive_result = _run_search(
         f"repulsive random [{repulsive_random_levels}; c1={repulsive_c1}, c2={repulsive_c2}]",
         sheet_states,
-        bot.RepulsiveHierarchicalRandomThrows(
+        RepulsiveHierarchicalRandomThrows(
             rng=np.random.default_rng(seed + 3),
             n_initial_throws=repulsive_random_initial_throws,
             level_configs=repulsive_random_levels,
