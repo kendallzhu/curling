@@ -11,7 +11,7 @@ from dataclasses import asdict, dataclass
 import json
 import hashlib
 from pathlib import Path
-from typing import Callable, Mapping
+from typing import Any, Callable, Mapping
 
 import numpy as np
 
@@ -23,7 +23,11 @@ import physics
 import scoring
 import state
 import stats
-from bot import RandomThrows, ThrowSearcher, ThrowsGridSearcher
+from bot import (
+    DEFAULT_THROW_PERTURBATIONS, RandomThrows, ThrowPerturbations,
+    ThrowSearcher, ThrowsGridSearcher, select_robust_throws,
+)
+from physics_cache import cached_physics as shared_cached_physics
 
 
 RandomSheetStates = Callable[..., state.SheetStates]
@@ -151,7 +155,7 @@ class CachedPhysics:
         return self.backend.run_to_next_collision_or_stop(sheet_states=sheet_states)
 
 
-cached_physics = CachedPhysics()
+cached_physics = shared_cached_physics
 
 
 def _legacy_random_sheet_states(
@@ -164,10 +168,14 @@ def _legacy_random_sheet_states(
 
 @dataclass(frozen=True)
 class ExperimentSetup:
+    seed: int
     random_sheet_states: RandomSheetStates
     searcher: ThrowSearcher
     model_comparison_searcher: ThrowSearcher
     greedy_comparison_searcher: ThrowSearcher
+    perturbations: ThrowPerturbations
+    random_throw_count: int
+    robust_top_fraction: float
 
 
 def show_state_generator_versions() -> None:
@@ -179,7 +187,13 @@ def show_state_generator_versions() -> None:
     print("               removed by earlier throws (more realistic boards).")
 
 
-def make_experiment_setup(state_generator_version: str, *, seed: int = 0) -> ExperimentSetup:
+def make_experiment_setup(
+    state_generator_version: str, *, seed: int = 0,
+    grid_size: tuple[int, int, int] = (10, 10, 4),
+    perturbations: ThrowPerturbations = DEFAULT_THROW_PERTURBATIONS,
+    random_throw_count: int = 36 * 4 * 3,
+    robust_top_fraction: float = 0.05,
+) -> ExperimentSetup:
     """Build the standard generators and searchers for an experiment.
 
     ``state_generator_version`` selects the distribution used for boards at
@@ -207,12 +221,18 @@ def make_experiment_setup(state_generator_version: str, *, seed: int = 0) -> Exp
         )
     rng = np.random.default_rng(seed)
     return ExperimentSetup(
+        seed=seed,
         random_sheet_states=random_sheet_states,
-        searcher=make_default_throw_searcher(seed),
-        model_comparison_searcher=ThrowsGridSearcher(10, 10, 4),
-        greedy_comparison_searcher=GridAndRandomThrowSearcher(
-            rng, grid_size=(10, 10, 4)
+        searcher=make_default_throw_searcher(
+            seed, grid_size=grid_size, random_throw_count=random_throw_count
         ),
+        model_comparison_searcher=ThrowsGridSearcher(*grid_size),
+        greedy_comparison_searcher=GridAndRandomThrowSearcher(
+            rng, grid_size=grid_size, random_count=random_throw_count
+        ),
+        perturbations=perturbations,
+        random_throw_count=random_throw_count,
+        robust_top_fraction=robust_top_fraction,
     )
 
 
@@ -446,14 +466,20 @@ class GridAndRandomThrowSearcher:
         )
 
 
-def make_default_throw_searcher(seed: int = 0) -> GridAndRandomThrowSearcher:
-    return GridAndRandomThrowSearcher(np.random.default_rng(seed))
+def make_default_throw_searcher(
+    seed: int = 0, *, grid_size: tuple[int, int, int] = (8, 8, 4),
+    random_throw_count: int = 36 * 4 * 3,
+) -> GridAndRandomThrowSearcher:
+    return GridAndRandomThrowSearcher(
+        np.random.default_rng(seed), grid_size=grid_size,
+        random_count=random_throw_count,
+    )
 
 
 def evaluate_model(
     model, normalizer, data: dataset.TrainingData, *, N: int,
     num_bootstrap_samples: int = 1000, seed: int = 0,
-) -> object:
+) -> stats.NeuralNetStats:
     """Return the project's standard categorical prediction statistics."""
     evaluation_data = dataset.TrainingData(
         input_features=normalizer.normalize(data.raw_inputs),
@@ -561,27 +587,35 @@ def _candidate_results(sheet_states, throws, tiled_states):
     return cached_physics.run_until_stopping(sheet_states=tiled_states, throws=throws)
 
 
-def _choose_throw(sheet_states, team, searcher, scorer):
+def _choose_throw(sheet_states, team, searcher, scorer, perturbations, top_fraction):
     throws, tiled = searcher.get_throws_for_num_sims(team=team, sheet_states=sheet_states)
     n = sheet_states.x.shape[0]
     if n == 0:
         return state.Throws(*(np.array([]) for _ in range(5)))
-    result = _candidate_results(sheet_states, throws, tiled)
-    scores = np.asarray(scorer(result, team))
-    candidates = scores.reshape(-1, n).argmax(axis=0) * n + np.arange(n)
-    return state.Throws(*(getattr(throws, name)[candidates] for name in ("angle_deg", "speed", "turn", "y_val", "team")))
+
+    def score_throws(states, candidate_throws):
+        return np.asarray(scorer(_candidate_results(states, candidate_throws, states), team))
+
+    return select_robust_throws(
+        sheet_states=sheet_states,
+        candidate_throws=throws,
+        exact_scores=score_throws(tiled, throws),
+        scoring_function=score_throws,
+        perturbations=perturbations,
+        top_fraction=top_fraction,
+    )
 
 
-def choose_model_throws(sheet_states, model, normalizer, max_stones, searcher, team):
+def choose_model_throws(sheet_states, model, normalizer, max_stones, searcher, team, perturbations=DEFAULT_THROW_PERTURBATIONS, top_fraction=0.05):
     def score(result, team):
         return np.where(team == 0, 1, -1) * model.expected_score(
             model.run(normalizer.normalize(raw_padded_sheet_state_features(result, max_stones))[:, :, None])
         )
-    return _choose_throw(sheet_states, team, searcher, score)
+    return _choose_throw(sheet_states, team, searcher, score, perturbations, top_fraction)
 
 
-def choose_greedy_throws(sheet_states, searcher, team):
-    return _choose_throw(sheet_states, team, searcher, lambda result, team: scoring.get_net_score_for_team(result, team))
+def choose_greedy_throws(sheet_states, searcher, team, perturbations=DEFAULT_THROW_PERTURBATIONS, top_fraction=0.05):
+    return _choose_throw(sheet_states, team, searcher, lambda result, team: scoring.get_net_score_for_team(result, team), perturbations, top_fraction)
 
 
 def model_candidate_diagnostics(
@@ -616,16 +650,16 @@ def model_candidate_diagnostics(
     }
 
 
-def rollout_to_terminal(sheet_states, models: Mapping[int, tuple[object, dataset.Normalizer]], max_stones: int, searcher: ThrowSearcher) -> tuple[state.SheetStates, np.ndarray]:
+def rollout_to_terminal(sheet_states, models: Mapping[int, tuple[object, dataset.Normalizer]], max_stones: int, searcher: ThrowSearcher, perturbations=DEFAULT_THROW_PERTURBATIONS, top_fraction=0.05) -> tuple[state.SheetStates, np.ndarray]:
     current = sheet_states
     while current.x.shape[1] < max_stones:
         n = current.x.shape[1]
         team = int(current.next_team_to_play()[0])
         if n == max_stones - 1:
-            throws = choose_greedy_throws(current, searcher, team)
+            throws = choose_greedy_throws(current, searcher, team, perturbations, top_fraction)
         else:
             model, normalizer = models[n + 1]
-            throws = choose_model_throws(current, model, normalizer, max_stones, searcher, team)
+            throws = choose_model_throws(current, model, normalizer, max_stones, searcher, team, perturbations, top_fraction)
         current = cached_physics.run_until_stopping(sheet_states=current, throws=throws)
     return current, scoring.get_net_score_for_team(current, 0)
 
@@ -635,6 +669,8 @@ def generate_dataset(
     models=None, searcher=None, batch_size: int = 32,
     shard_dir: str | Path | None = None, shard_size: int = 500,
     random_sheet_states: RandomSheetStates | None = None,
+    perturbations: ThrowPerturbations = DEFAULT_THROW_PERTURBATIONS,
+    robust_top_fraction: float = 0.05,
     diagnostic_callback: DatasetProgressCallback | None = None,
     diagnostic_train_sizes: tuple[int, ...] = (),
     diagnostic_evaluation_size: int = 1000,
@@ -690,12 +726,10 @@ def generate_dataset(
         elif combined_states.x.shape[0]:
             pending_states.append(combined_states)
             pending_scores.append(combined_scores)
-    team0 = (i + 1) // 2
-    team1 = i // 2
     for start in range(0, num_rows, batch_size):
         count = min(batch_size, num_rows - start)
         initial = random_sheet_states(turn=i, num_sims=count, rng=rng)
-        final, scores = rollout_to_terminal(initial, models or {}, max_stones, searcher)
+        _, scores = rollout_to_terminal(initial, models or {}, max_stones, searcher, perturbations, robust_top_fraction)
         parts_states.append(initial)
         parts_scores.append(scores)
         pending_states.append(initial)
@@ -744,7 +778,7 @@ def write_policy_comparison(path: str | Path, comparison: PolicyComparison) -> N
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     s = comparison.initial_states
-    arrays = {
+    arrays: dict[str, Any] = {
         "first_team": s.first_team,
         "x": s.x,
         "y": s.y,
@@ -768,6 +802,8 @@ def compare_policies(
     max_stones: int,
     searcher=None,
     model_searcher=None,
+    perturbations: ThrowPerturbations = DEFAULT_THROW_PERTURBATIONS,
+    robust_top_fraction: float = 0.05,
 ) -> PolicyComparison:
     if sheet_states.x.shape[1] != i - 1:
         raise ValueError("comparison states must contain i-1 stones")
@@ -776,16 +812,16 @@ def compare_policies(
     team = int(sheet_states.next_team_to_play()[0])
     model, normalizer = models[i]
     model_throw = choose_model_throws(
-        sheet_states, model, normalizer, max_stones, model_searcher, team
+        sheet_states, model, normalizer, max_stones, model_searcher, team, perturbations, robust_top_fraction
     )
-    greedy_throw = choose_greedy_throws(sheet_states, searcher, team)
-    model_after, model_scores = rollout_to_terminal(
+    greedy_throw = choose_greedy_throws(sheet_states, searcher, team, perturbations, robust_top_fraction)
+    _, model_scores = rollout_to_terminal(
         cached_physics.run_until_stopping(sheet_states=sheet_states, throws=model_throw),
-        models, max_stones, searcher
+        models, max_stones, searcher, perturbations, robust_top_fraction
     )
-    greedy_after, greedy_scores = rollout_to_terminal(
+    _, greedy_scores = rollout_to_terminal(
         cached_physics.run_until_stopping(sheet_states=sheet_states, throws=greedy_throw),
-        models, max_stones, searcher
+        models, max_stones, searcher, perturbations, robust_top_fraction
     )
     return PolicyComparison(sheet_states, model_scores, greedy_scores, model_throw, greedy_throw)
 
@@ -800,13 +836,22 @@ def print_policy_comparison(
     model_comparison_searcher: ThrowSearcher,
     max_stones: int,
     num_sims: int = 5,
+    perturbations: ThrowPerturbations = DEFAULT_THROW_PERTURBATIONS,
+    seed: int = 0,
+    robust_top_fraction: float = 0.05,
 ) -> PolicyComparison:
     """Compare and persist model and greedy policies for one model index."""
     if num_sims < 1:
         raise ValueError("num_sims must be positive")
+    comparison_seed = seed + i
     states = random_sheet_states(
-        turn=i - 1, num_sims=num_sims, rng=np.random.default_rng(i)
+        turn=i - 1, num_sims=num_sims, rng=np.random.default_rng(comparison_seed)
     )
+    for comparison_searcher in (greedy_comparison_searcher, model_comparison_searcher):
+        if isinstance(comparison_searcher, GridAndRandomThrowSearcher):
+            comparison_searcher.random_searcher.rng = np.random.default_rng(
+                comparison_seed
+            )
     comparison = compare_policies(
         i,
         states,
@@ -814,6 +859,8 @@ def print_policy_comparison(
         max_stones=max_stones,
         searcher=greedy_comparison_searcher,
         model_searcher=model_comparison_searcher,
+        perturbations=perturbations,
+        robust_top_fraction=robust_top_fraction,
     )
     print(i, policy_summary(comparison))
     write_policy_comparison(
@@ -950,6 +997,9 @@ def train_sequential_models(
                     model_comparison_searcher=experiment.model_comparison_searcher,
                     max_stones=max_stones,
                     num_sims=policy_comparison_num_sims,
+                    perturbations=experiment.perturbations,
+                    seed=experiment.seed,
+                    robust_top_fraction=experiment.robust_top_fraction,
                 )
             else:
                 models[i] = load_model(artifact_dir / f"m_{i}.npz")
@@ -965,6 +1015,7 @@ def train_sequential_models(
         )
 
         def diagnostic_callback(generated, train_size, model_index=i):
+            assert diagnostic_output_dir is not None
             train_diagnostic_model(
                 generated,
                 train_size=train_size,
@@ -976,6 +1027,8 @@ def train_sequential_models(
             i, num_rows=rows_per_model, N=N, seed=i, models=models,
             searcher=experiment.searcher, shard_dir=artifact_dir / f"D_{i}",
             shard_size=500, random_sheet_states=experiment.random_sheet_states,
+            perturbations=experiment.perturbations,
+            robust_top_fraction=experiment.robust_top_fraction,
             diagnostic_callback=diagnostic_callback if diagnostic_sizes else None,
             diagnostic_train_sizes=diagnostic_sizes,
         )
@@ -999,6 +1052,7 @@ def train_sequential_models(
             model_comparison_searcher=experiment.model_comparison_searcher,
             max_stones=max_stones,
             num_sims=policy_comparison_num_sims,
+            perturbations=experiment.perturbations,
         )
     print(f"trained {len(models)} models")
     return SequentialTrainingRun(models, datasets, validation_datasets, training_info)

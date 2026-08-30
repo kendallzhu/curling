@@ -10,6 +10,7 @@ import curling_nn
 import data_generation
 import dataset
 import physics
+from physics_cache import cached_physics
 import scoring
 import state
 
@@ -152,30 +153,6 @@ def generate_second_to_last_evaluation_states(
     return data_generation.random_sheet_states(team1=4, team2=4, num_sims=num_sims)
 
 
-def _select_best_throws(
-    sheet_states: state.SheetStates,
-    team: int,
-    throw_searcher: bot.ThrowSearcher,
-    scores: np.ndarray,
-) -> state.Throws:
-    num_sims = sheet_states.x.shape[0]
-    n_candidates = scores.size // num_sims
-    chosen = (
-        scores.reshape(n_candidates, num_sims).argmax(axis=0) * num_sims
-        + np.arange(num_sims)
-    )
-    candidate_throws, _ = throw_searcher.get_throws_for_num_sims(
-        team=team, sheet_states=sheet_states
-    )
-    return state.Throws(
-        angle_deg=candidate_throws.angle_deg[chosen],
-        speed=candidate_throws.speed[chosen],
-        turn=candidate_throws.turn[chosen],
-        y_val=candidate_throws.y_val[chosen],
-        team=candidate_throws.team[chosen],
-    )
-
-
 def grid_search_best_throws(
     sheet_states: state.SheetStates,
     team: int,
@@ -185,11 +162,16 @@ def grid_search_best_throws(
     candidate_throws, tiled_states = throw_searcher.get_throws_for_num_sims(
         team=team, sheet_states=sheet_states
     )
-    final_states = physics.run_until_stopping(
+    final_states = cached_physics.run_until_stopping(
         sheet_states=state.add_stones_from_throws(tiled_states, candidate_throws)
     )
     scores = scoring.get_net_score_for_team(final_states, team)
-    return _select_best_throws(sheet_states, team, throw_searcher, scores)
+    return bot.select_robust_throws(
+        sheet_states=sheet_states,
+        candidate_throws=candidate_throws,
+        exact_scores=scores,
+        scoring_function=bot.score_throws_by_net_score,
+    )
 
 
 def value_network_best_throws(
@@ -203,7 +185,7 @@ def value_network_best_throws(
     candidate_throws, tiled_states = throw_searcher.get_throws_for_num_sims(
         team=team, sheet_states=sheet_states
     )
-    after_throw = physics.run_until_stopping(
+    after_throw = cached_physics.run_until_stopping(
         sheet_states=state.add_stones_from_throws(tiled_states, candidate_throws)
     )
     features = curling_nn.VInputFeatures.create_of_sheet_states(
@@ -213,7 +195,23 @@ def value_network_best_throws(
         value_network.run(features[:, :, None])
     )
     scores_from_team = np.where(candidate_throws.team == 0, 1, -1) * expected_scores
-    return _select_best_throws(sheet_states, team, throw_searcher, scores_from_team)
+
+    def score_throws(states: state.SheetStates, throws: state.Throws) -> np.ndarray:
+        after_throw = cached_physics.run_until_stopping(
+            sheet_states=state.add_stones_from_throws(states, throws)
+        )
+        features = curling_nn.VInputFeatures.create_of_sheet_states(
+            after_throw, normalizer
+        )
+        expected = value_network.expected_score(value_network.run(features[:, :, None]))
+        return np.where(throws.team == 0, 1, -1) * expected
+
+    return bot.select_robust_throws(
+        sheet_states=sheet_states,
+        candidate_throws=candidate_throws,
+        exact_scores=scores_from_team,
+        scoring_function=score_throws,
+    )
 
 
 def compare_second_to_last_policies(
@@ -242,11 +240,11 @@ def compare_second_to_last_policies(
         ("value_network", value_second),
         ("grid_search", grid_second),
     ):
-        after_second = physics.run_until_stopping(
+        after_second = cached_physics.run_until_stopping(
             sheet_states=state.add_stones_from_throws(sheet_states, second_throw)
         )
         last_throw = grid_search_best_throws(after_second, last_team, throw_searcher)
-        final_states = physics.run_until_stopping(
+        final_states = cached_physics.run_until_stopping(
             sheet_states=state.add_stones_from_throws(after_second, last_throw)
         )
         scores = scoring.get_score(final_states)

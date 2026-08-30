@@ -10,6 +10,7 @@ import curling_nn
 import data_generation
 import dataset
 import physics
+from physics_cache import cached_physics
 import state
 import scoring
 
@@ -73,7 +74,7 @@ def write_value_network_training_data_shards(
                 rng=state_rng,
             )
         last_throws = data_generation._grid_search_throws(batch_states, team, search_rng)
-        final_states = physics.run_until_stopping(
+        final_states = cached_physics.run_until_stopping(
             sheet_states=state.add_stones_from_throws(batch_states, last_throws)
         )
         final_scores = scoring.get_net_score_for_team(final_states, 0)

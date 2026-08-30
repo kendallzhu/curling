@@ -1,5 +1,6 @@
 import numpy as np
 import math
+from dataclasses import dataclass
 from typing import Callable, Protocol
 
 from state import (
@@ -12,6 +13,7 @@ from state import (
     add_stones_from_throws,
     add_noise_to_throw,
     tile_sheet_states,
+    take_sheet_states,
     empty_board,
 )
 
@@ -32,6 +34,7 @@ from constants import (
 import nn
 import scoring
 import physics
+from physics_cache import cached_physics
 import curling_nn
 
 
@@ -49,7 +52,7 @@ def simulate_score_after_throw(
     state: SheetStates, throw: Throw
 ) -> np.ndarray:  # (num_sims, 1)
     new_state = add_new_stone(state, throw)
-    final_state = physics.run_until_stopping(sheet_states=new_state)
+    final_state = cached_physics.run_until_stopping(sheet_states=new_state)
     score = scoring.get_net_score_for_team(final_state, throw.team)
     return score
 
@@ -61,7 +64,7 @@ def simulate_average_scores_with_noise(
     noisy_throws = [add_noise_to_throw(t) for t in throws for _ in range(num_samples)]
     noisy_state = tile_sheet_states(state, len(noisy_throws))
     noisy_state = add_new_stones(noisy_state, noisy_throws)
-    final_state = physics.run_until_stopping(sheet_states=noisy_state)
+    final_state = cached_physics.run_until_stopping(sheet_states=noisy_state)
     scores = scoring.get_net_score_for_team(
         final_state, throws[0].team
     )  # (len(throws) * num_samples,)
@@ -73,6 +76,88 @@ class CurlingPolicy(Protocol):
     def make_throws(
         self, sheet_states: SheetStates, team: int, rng: np.random.Generator
     ) -> Throws: ...
+
+
+@dataclass(frozen=True)
+class ThrowPerturbations:
+    """Discrete release-angle outcomes used to rank candidate throws."""
+
+    angle_offsets_deg: tuple[float, ...] = (0.0, -0.1, 0.1)
+    probabilities: tuple[float, ...] = (0.5, 0.25, 0.25)
+
+    def __post_init__(self):
+        if len(self.angle_offsets_deg) != len(self.probabilities):
+            raise ValueError("angle offsets and probabilities must have the same length")
+        if not self.angle_offsets_deg or not np.isclose(sum(self.probabilities), 1.0):
+            raise ValueError("perturbation probabilities must sum to one")
+
+
+DEFAULT_THROW_PERTURBATIONS = ThrowPerturbations()
+
+
+def select_robust_throws(
+    *,
+    sheet_states: SheetStates,
+    candidate_throws: Throws,
+    exact_scores: np.ndarray,
+    scoring_function: Callable[[SheetStates, Throws], np.ndarray],
+    perturbations: ThrowPerturbations = DEFAULT_THROW_PERTURBATIONS,
+    top_fraction: float = 0.05,
+) -> Throws:
+    """Choose top exact candidates by their weighted perturbed value.
+
+    Candidates use the standard candidate-major, state-minor layout. Exact
+    scores are supplied by the caller, so only non-exact outcomes are scored.
+    """
+    num_sims = sheet_states.x.shape[0]
+    if num_sims == 0:
+        return Throws(*(np.array([]) for _ in range(5)))
+    if candidate_throws.angle_deg.size % num_sims:
+        raise ValueError("candidate throws must contain the same count for every state")
+    if not 0 < top_fraction <= 1:
+        raise ValueError("top_fraction must be in (0, 1]")
+
+    num_candidates = candidate_throws.angle_deg.size // num_sims
+    scores = np.asarray(exact_scores).reshape(num_candidates, num_sims)
+    num_selected = max(1, math.ceil(num_candidates * top_fraction))
+    top_candidates = np.argsort(scores, axis=0)[-num_selected:]
+    sim_indices = np.broadcast_to(np.arange(num_sims), top_candidates.shape)
+    candidate_indices = (top_candidates * num_sims + sim_indices).ravel()
+    selected_exact_scores = scores[top_candidates, sim_indices].ravel()
+
+    offsets = np.asarray(perturbations.angle_offsets_deg)
+    probabilities = np.asarray(perturbations.probabilities)
+    exact_offset = int(np.flatnonzero(offsets == 0.0)[0])
+    perturbed_offsets = np.delete(offsets, exact_offset)
+    perturbed_probabilities = np.delete(probabilities, exact_offset)
+    repeated_indices = np.repeat(candidate_indices, perturbed_offsets.size)
+    noisy_throws = Throws(
+        angle_deg=candidate_throws.angle_deg[repeated_indices]
+        + np.tile(perturbed_offsets, candidate_indices.size),
+        speed=candidate_throws.speed[repeated_indices],
+        turn=candidate_throws.turn[repeated_indices],
+        y_val=candidate_throws.y_val[repeated_indices],
+        team=candidate_throws.team[repeated_indices],
+    )
+    noisy_states = take_sheet_states(
+        sheet_states, np.repeat(sim_indices.ravel(), perturbed_offsets.size)
+    )
+    noisy_scores = scoring_function(noisy_states, noisy_throws).reshape(
+        candidate_indices.size, perturbed_offsets.size
+    )
+    weighted_scores = (
+        probabilities[exact_offset] * selected_exact_scores
+        + noisy_scores @ perturbed_probabilities
+    ).reshape(num_selected, num_sims)
+    winners = weighted_scores.argmax(axis=0)
+    chosen = top_candidates[winners, np.arange(num_sims)] * num_sims + np.arange(num_sims)
+    return Throws(
+        angle_deg=candidate_throws.angle_deg[chosen],
+        speed=candidate_throws.speed[chosen],
+        turn=candidate_throws.turn[chosen],
+        y_val=candidate_throws.y_val[chosen],
+        team=candidate_throws.team[chosen],
+    )
 
 
 class ThrowSearcher(Protocol):
@@ -291,7 +376,7 @@ def get_throw_grid_search(state: SheetStates, team: int) -> tuple[Throw, float, 
     tiled_state = tile_sheet_states(state, num_combos)
     tiled_state = add_new_stones(tiled_state, throws)
 
-    final_state = physics.run_until_stopping(sheet_states=tiled_state)
+    final_state = cached_physics.run_until_stopping(sheet_states=tiled_state)
     scores = scoring.get_net_score_for_team(final_state, team)  # (num_combos,)
 
     target_score = np.max(scores)
@@ -350,7 +435,7 @@ class RandomThrows(ThrowSearcher):
 
 
 def score_throws_by_net_score(sheet_states: SheetStates, throws: Throws) -> np.ndarray:
-    final_states = physics.run_until_stopping(
+    final_states = cached_physics.run_until_stopping(
         sheet_states=add_stones_from_throws(sheet_states, throws)
     )
     return scoring.get_net_score_for_team(final_states, int(throws.team[0]))
@@ -407,7 +492,7 @@ class ArgmaxThrowPolicy(CurlingPolicy):
         throw_searcher: ThrowSearcher,
     ):
         def scoring_function(sheet_states: SheetStates, throws: Throws) -> np.ndarray:
-            final_states = physics.run_until_stopping(
+            final_states = cached_physics.run_until_stopping(
                 sheet_states=add_stones_from_throws(sheet_states, throws)
             )
             input_features = curling_nn.VInputFeatures.create_of_sheet_states(
@@ -426,18 +511,15 @@ class ArgmaxThrowPolicy(CurlingPolicy):
     def make_throws(
         self, sheet_states: SheetStates, team: int, rng: np.random.Generator
     ):
-        num_sims = sheet_states.x.shape[0]
         repeated_throws, tiled_starting_states = self.throw_searcher.get_throws_for_num_sims(
             team=team, sheet_states=sheet_states
         )
         scores = self.scoring_function(tiled_starting_states, repeated_throws)
-        chosen_throws = scores.reshape((tiled_starting_states.x.shape[0] // num_sims, num_sims)).argmax(axis=0) * num_sims + np.arange(num_sims)
-        return Throws(
-            angle_deg=repeated_throws.angle_deg[chosen_throws],
-            speed=repeated_throws.speed[chosen_throws],
-            turn=repeated_throws.turn[chosen_throws],
-            y_val=repeated_throws.y_val[chosen_throws],
-            team=repeated_throws.team[chosen_throws],
+        return select_robust_throws(
+            sheet_states=sheet_states,
+            candidate_throws=repeated_throws,
+            exact_scores=scores,
+            scoring_function=self.scoring_function,
         )
 
 
@@ -455,7 +537,7 @@ def run_games(
     for _ in range(num_stones_per_side):
         for team, player in enumerate([first_player, second_player]):
             throws = player.make_throws(states[-1], team, rng)
-            current_state = physics.run_until_stopping(
+            current_state = cached_physics.run_until_stopping(
                 sheet_states=add_stones_from_throws(current_state, throws)
             )
             states.append(current_state)

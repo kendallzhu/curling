@@ -14,6 +14,7 @@ import polars as pl
 
 import bot
 import physics
+from physics_cache import cached_physics
 import scoring
 import state
 from scratch.throw_searchers import (
@@ -46,7 +47,7 @@ def _score_search_in_batches(
         )
         batch_num_sims = len(indices)
         batch_num_candidates = tiled_states.x.shape[0] // batch_num_sims
-        final_states = physics.run_until_stopping(
+        final_states = cached_physics.run_until_stopping(
             sheet_states=state.add_stones_from_throws(tiled_states, throws)
         )
         scores = scoring.get_net_score_for_team(final_states, team)

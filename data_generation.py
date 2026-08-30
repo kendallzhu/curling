@@ -7,6 +7,7 @@ import curling_nn
 import nn
 import dataset
 import physics
+from physics_cache import cached_physics
 import scoring
 from dataset import Normalizer, TrainingData
 from bot import (
@@ -15,6 +16,7 @@ from bot import (
     ThrowSearcher,
     ThrowsGridSearcher,
     add_noise_to_throw,
+    select_robust_throws,
     score_throws_by_net_score,
 )
 
@@ -178,7 +180,7 @@ def score_throws_by_actual_score(
     sheet_states: state.SheetStates, throws: state.Throws
 ) -> np.ndarray:
     """Score candidate throws using the physics simulation and actual scoring."""
-    final_states = physics.run_until_stopping(
+    final_states = cached_physics.run_until_stopping(
         sheet_states=state.add_stones_from_throws(sheet_states, throws)
     )
     return scoring.get_net_score_for_team(final_states, int(throws.team[0]))
@@ -391,7 +393,7 @@ def best_throws_for_sheets(
     noisy_states = state.take_sheet_states(
         sheet_states, np.asarray(noisy_state_indices, dtype=int)
     )
-    final_noisy_states = physics.run_until_stopping(
+    final_noisy_states = cached_physics.run_until_stopping(
         sheet_states=state.add_stones_from_throws(noisy_states, noisy_throws_data)
     )
     noisy_scores = scoring.get_net_score_for_team(final_noisy_states, team)
@@ -495,19 +497,12 @@ def _grid_search_throws(
         candidate_throws = state.concat_throws([grid_throws, random_throws])
         candidate_states = state.concat([grid_states, random_states])
         scores = score_throws_by_net_score(candidate_states, candidate_throws)
-        num_sims = batch_states.x.shape[0]
-        n_candidates = scores.size // num_sims
-        chosen = (
-            scores.reshape(n_candidates, num_sims).argmax(axis=0) * num_sims
-            + np.arange(num_sims)
-        )
         parts.append(
-            state.Throws(
-                angle_deg=candidate_throws.angle_deg[chosen],
-                speed=candidate_throws.speed[chosen],
-                turn=candidate_throws.turn[chosen],
-                y_val=candidate_throws.y_val[chosen],
-                team=candidate_throws.team[chosen],
+            select_robust_throws(
+                sheet_states=batch_states,
+                candidate_throws=candidate_throws,
+                exact_scores=scores,
+                scoring_function=score_throws_by_net_score,
             )
         )
     return state.concat_throws(parts)
@@ -530,7 +525,7 @@ def q_network_training_data(
         n_random_throws=n_random_throws,
         n_per_score=n_per_score,
     )
-    final_states = physics.run_until_stopping(
+    final_states = cached_physics.run_until_stopping(
         sheet_states=state.add_stones_from_throws(states, throws)
     )
     final_scores = scoring.get_net_score_for_team(final_states, 0)
@@ -563,7 +558,7 @@ def value_network_training_data(
             f"team {team} is not next to play (next_team_to_play={next_team})"
         )
     last_throws = _grid_search_throws(sheet_states, team, rng)
-    final_states = physics.run_until_stopping(
+    final_states = cached_physics.run_until_stopping(
         sheet_states=state.add_stones_from_throws(sheet_states, last_throws)
     )
     final_scores = scoring.get_net_score_for_team(final_states, 0)

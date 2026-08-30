@@ -64,10 +64,6 @@
             "approve": true,
             "matchCommandLine": true
         },
-        "/^venv/bin/python -m pytest -q tests/test_data_generation\\.py$/": {
-            "approve": true,
-            "matchCommandLine": true
-        },
         "/^venv/bin/python -m pytest -q tests/test_data_generation\\.py --inline-snapshot=create$/": {
             "approve": true,
             "matchCommandLine": true
@@ -81,6 +77,42 @@
             "matchCommandLine": true
         },
         "/^venv/bin/python -m pytest -q --inline-snapshot=disable$/": {
+            "approve": true,
+            "matchCommandLine": true
+        },
+        "/^venv/bin/python -m pytest -q tests/test_bot\\.py -k select_robust_throws$/": {
+            "approve": true,
+            "matchCommandLine": true
+        },
+        "/^venv/bin/python -m pytest -q --disable-warnings --inline-snapshot=disable tests/test_bot\\.py -k select_robust_throws$/": {
+            "approve": true,
+            "matchCommandLine": true
+        },
+        "/^venv/bin/python -m pytest -q --disable-warnings --inline-snapshot=disable$/": {
+            "approve": true,
+            "matchCommandLine": true
+        },
+        "/^venv/bin/python -m pytest -q --disable-warnings --inline-snapshot=disable tests/test_bot\\.py tests/test_sequential_training\\.py$/": {
+            "approve": true,
+            "matchCommandLine": true
+        },
+        "/^venv/bin/python -m pytest -q --disable-warnings --inline-snapshot=disable tests/test_sequential_training\\.py$/": {
+            "approve": true,
+            "matchCommandLine": true
+        },
+        "/^venv/bin/python -m pytest -q --disable-warnings --inline-snapshot=disable tests/test_data_generation\\.py tests/test_evaluation\\.py$/": {
+            "approve": true,
+            "matchCommandLine": true
+        },
+        "/^venv/bin/python -m pytest -q --disable-warnings --inline-snapshot=disable tests/test_bot\\.py tests/test_data_generation\\.py tests/test_evaluation\\.py tests/test_sequential_training\\.py$/": {
+            "approve": true,
+            "matchCommandLine": true
+        },
+        "/^venv/bin/python -m pytest -q --disable-warnings --inline-snapshot=fix tests/test_bot\\.py -k select_robust_throws$/": {
+            "approve": true,
+            "matchCommandLine": true
+        },
+        "/^venv/bin/python -m pytest -q --disable-warnings --inline-snapshot=create tests/test_bot\\.py -k select_robust_throws$/": {
             "approve": true,
             "matchCommandLine": true
         }
