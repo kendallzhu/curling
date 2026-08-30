@@ -36,25 +36,6 @@ from physics_cache import cached_physics
 import curling_nn
 
 
-def get_throw(state: SheetStates, team) -> Throw:
-    return Throw(
-        angle_deg=0,
-        speed=2.13,
-        turn=0,
-        y_val=2.5,
-        team=team,
-    )
-
-
-def simulate_score_after_throw(
-    state: SheetStates, throw: Throw
-) -> np.ndarray:  # (num_sims, 1)
-    new_state = add_new_stone(state, throw)
-    final_state = cached_physics.run_until_stopping(sheet_states=new_state)
-    score = scoring.get_net_score_for_team(final_state, throw.team)
-    return score
-
-
 class CurlingPolicy(Protocol):
     def make_throws(
         self, sheet_states: SheetStates, team: int, rng: np.random.Generator
@@ -190,6 +171,23 @@ class ThrowSearcher(Protocol):
 
     def get_throws_for_num_sims(self, *, team: int, sheet_states: SheetStates) -> tuple[Throws, SheetStates]: ...
 
+
+def _tile_throws_and_states(
+    throws: Throws, sheet_states: SheetStates
+) -> tuple[Throws, SheetStates]:
+    num_sims = sheet_states.x.shape[0]
+    n_throws = throws.angle_deg.size
+    tiled_throws = Throws(
+        angle_deg=np.repeat(throws.angle_deg, num_sims),
+        speed=np.repeat(throws.speed, num_sims),
+        turn=np.repeat(throws.turn, num_sims),
+        y_val=np.repeat(throws.y_val, num_sims),
+        team=np.repeat(throws.team, num_sims),
+    )
+    tiled_sheet_states = tile_sheet_states(sheet_states, n_throws)
+    return tiled_throws, tiled_sheet_states
+
+
 class ThrowsGridSearcher(ThrowSearcher):
     def __init__(self, num_angles: int, num_speeds: int, num_y_vals: int):
         self.num_angles = num_angles
@@ -214,36 +212,7 @@ class ThrowsGridSearcher(ThrowSearcher):
         )
 
     def get_throws_for_num_sims(self, *, team: int, sheet_states: SheetStates) -> tuple[Throws, SheetStates]:
-        num_sims = sheet_states.x.shape[0]
-        angle_options = np.linspace(min_release_angle, max_release_angle, self.num_angles)
-        speed_options = np.linspace(min_release_speed, max_release_speed, self.num_speeds)
-        y_options = np.linspace(min_release_y, max_release_y, self.num_y_vals)
-
-        angles, speeds, turns, ys = np.meshgrid(
-            angle_options, speed_options, turn_options, y_options, indexing='ij'
-        )
-
-        angles_flat = angles.flatten()
-        speeds_flat = speeds.flatten()
-        turns_flat = turns.flatten()
-        ys_flat = ys.flatten()
-        n_throws = len(angles_flat)
-
-        angle_deg = np.repeat(angles_flat, num_sims)
-        speed = np.repeat(speeds_flat, num_sims)
-        turn = np.repeat(turns_flat, num_sims)
-        y_val = np.repeat(ys_flat, num_sims)
-
-        throws = Throws(
-            angle_deg=angle_deg,
-            speed=speed,
-            turn=turn,
-            y_val=y_val,
-            team=np.ones(angle_deg.size, dtype=int) * team
-        )
-
-        tiled_sheet_states = tile_sheet_states(sheet_states, n_throws)
-        return throws, tiled_sheet_states
+        return _tile_throws_and_states(self.get_throws(team), sheet_states)
 
 
 class RandomThrows(ThrowSearcher):

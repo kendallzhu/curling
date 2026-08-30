@@ -179,10 +179,7 @@ def score_throws_by_actual_score(
     sheet_states: state.SheetStates, throws: state.Throws
 ) -> np.ndarray:
     """Score candidate throws using the physics simulation and actual scoring."""
-    final_states = cached_physics.run_until_stopping(
-        sheet_states=state.add_stones_from_throws(sheet_states, throws)
-    )
-    return scoring.get_net_score_for_team(final_states, int(throws.team[0]))
+    return score_throws_by_net_score(sheet_states, throws)
 
 
 def best_throws_for_sheets_by_nn(
@@ -299,33 +296,11 @@ def best_throws_for_sheets(
     ] = score_throws_by_net_score,
 ) -> state.Throws:
     """Return the most robust throw using fixed weighted angle offsets."""
-    num_sims = sheet_states.x.shape[0]
-    if num_sims == 0:
-        return state.Throws(
-            angle_deg=np.array([]),
-            speed=np.array([]),
-            turn=np.array([], dtype=int),
-            y_val=np.array([]),
-            team=np.array([], dtype=int),
-        )
-
-    candidate_throws, tiled_states = throw_searcher.get_throws_for_num_sims(
-        team=team, sheet_states=sheet_states
-    )
-    if tiled_states.x.shape[0] % num_sims != 0:
-        raise ValueError(
-            "throw_searcher must return a whole number of candidate throws per state"
-        )
-    if candidate_throws.angle_deg.shape[0] != tiled_states.x.shape[0]:
-        raise ValueError("throw_searcher returned mismatched throws and states")
-
-    scores = scoring_function(tiled_states, candidate_throws)
-    return select_robust_throws(
-        sheet_states=sheet_states,
-        candidate_throws=candidate_throws,
-        exact_scores=scores,
+    policy = ArgmaxThrowPolicy(
         scoring_function=scoring_function,
+        throw_searcher=throw_searcher,
     )
+    return policy.make_throws(sheet_states, team)
 
 
 def combine_throw_datasets(
