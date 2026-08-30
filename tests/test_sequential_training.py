@@ -1,9 +1,62 @@
 import json
-
 import numpy as np
 
 import data_generation
 from scratch import sequential_training as sequential
+
+
+def _throws(n, speed=2.0):
+    return sequential.state.Throws(
+        angle_deg=np.zeros(n), speed=np.full(n, speed),
+        turn=np.ones(n, dtype=int), y_val=np.full(n, 2.5),
+        team=np.ones(n, dtype=int),
+    )
+
+
+class _CountingBackend:
+    def __init__(self):
+        self.calls = []
+
+    def run_until_stopping(self, *, sheet_states):
+        self.calls.append(sheet_states.x.shape[0])
+        return sheet_states
+
+
+def test_physics_cache_persists_whole_vectorized_batches(tmp_path):
+    one = data_generation.random_sheet_states(
+        team1=1, team2=0, num_sims=1, rng=np.random.default_rng(5)
+    )
+    two = data_generation.random_sheet_states(
+        team1=1, team2=0, num_sims=1, rng=np.random.default_rng(6)
+    )
+    queried = sequential.state.concat([sequential.state.tile_sheet_states(one, 3), two])
+    throws = sequential.state.concat_throws([_throws(3), _throws(1, speed=2.1)])
+    path = tmp_path / "physics-cache"
+    backend = _CountingBackend()
+    cache = sequential.PhysicsCache(path)
+    wrapper = sequential.CachedPhysics(backend, cache)
+
+    result = wrapper.run_until_stopping(sheet_states=queried, throws=throws)
+    assert result.x.shape[0] == 4
+    assert backend.calls == [4]
+    assert cache.stats() == {"hits": 0, "misses": 1, "physics_simulations": 4, "hit_rate": 0.0}
+
+    reopened = sequential.CachedPhysics(backend, sequential.PhysicsCache(path))
+    reopened.run_until_stopping(sheet_states=queried, throws=throws)
+    assert backend.calls == [4]
+    assert reopened.cache.stats()["hits"] == 1
+
+
+def test_seeded_setup_random_states_and_throws_are_repeatable():
+    first = sequential.make_experiment_setup("turn_based", seed=17)
+    second = sequential.make_experiment_setup("turn_based", seed=17)
+    first_states = first.random_sheet_states(turn=3, num_sims=4, rng=np.random.default_rng(17))
+    second_states = second.random_sheet_states(turn=3, num_sims=4, rng=np.random.default_rng(17))
+    np.testing.assert_array_equal(first_states.x, second_states.x)
+    first_throws, _ = first.searcher.get_throws_for_num_sims(team=1, sheet_states=first_states)
+    second_throws, _ = second.searcher.get_throws_for_num_sims(team=1, sheet_states=second_states)
+    np.testing.assert_array_equal(first_throws.speed, second_throws.speed)
+    np.testing.assert_array_equal(first_throws.y_val, second_throws.y_val)
 
 
 def test_show_state_generator_versions(capsys):

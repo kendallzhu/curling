@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass
 import json
+import hashlib
 from pathlib import Path
 from typing import Callable, Mapping
 
@@ -27,6 +28,130 @@ from bot import RandomThrows, ThrowSearcher, ThrowsGridSearcher
 
 RandomSheetStates = Callable[..., state.SheetStates]
 DatasetProgressCallback = Callable[["SequentialDataset", int], None]
+
+
+def _batch_key(sheet: state.SheetStates, throw: state.Throws) -> str:
+    """Create an exact, shape-aware key for one vectorized request."""
+    digest = hashlib.sha256()
+    for values in (
+        sheet.first_team, sheet.x, sheet.y, sheet.velocities.v,
+        sheet.velocities.theta, sheet.rotation_directions,
+        throw.angle_deg, throw.speed, throw.turn, throw.y_val, throw.team,
+    ):
+        array = np.asarray(values)
+        digest.update(str(array.dtype).encode())
+        digest.update(repr(array.shape).encode())
+        digest.update(np.ascontiguousarray(array).tobytes())
+    return digest.hexdigest()
+
+
+class PhysicsCache:
+    """Persistent whole-batch cache for vectorized physics calls."""
+
+    def __init__(self, path: str | Path):
+        self.path = Path(path)
+        self.path.mkdir(parents=True, exist_ok=True)
+        self.hits = 0
+        self.misses = 0
+        self.physics_simulations = 0
+
+    def clear_stats(self) -> None:
+        self.hits = self.misses = self.physics_simulations = 0
+
+    def stats(self) -> dict[str, float | int]:
+        queries = self.hits + self.misses
+        return {
+            "hits": self.hits,
+            "misses": self.misses,
+            "physics_simulations": self.physics_simulations,
+            "hit_rate": self.hits / queries if queries else 0.0,
+        }
+
+    def _path_for(self, key: str) -> Path:
+        return self.path / f"{key}.npz"
+
+    def get(self, key: str):
+        cache_path = self._path_for(key)
+        if not cache_path.exists():
+            return None
+        with np.load(cache_path) as values:
+            return state.SheetStates(
+                first_team=np.array(values["first_team"], copy=True),
+                x=np.array(values["x"], copy=True),
+                y=np.array(values["y"], copy=True),
+                velocities=state.Velocities(
+                    v=np.array(values["velocity_v"], copy=True),
+                    theta=np.array(values["velocity_theta"], copy=True),
+                ),
+                rotation_directions=np.array(values["rotation_directions"], copy=True),
+            )
+
+    def put(self, key: str, value: state.SheetStates) -> None:
+        destination = self._path_for(key)
+        temporary = self.path / f".{key}.tmp.npz"
+        np.savez_compressed(
+            temporary,
+            first_team=value.first_team,
+            x=value.x,
+            y=value.y,
+            velocity_v=value.velocities.v,
+            velocity_theta=value.velocities.theta,
+            rotation_directions=value.rotation_directions,
+        )
+        temporary.replace(destination)
+
+
+def _default_cache_path() -> Path:
+    return Path(".sequential_training_physics_cache")
+
+
+GLOBAL_PHYSICS_CACHE = PhysicsCache(_default_cache_path())
+
+
+class CachedPhysics:
+    """Physics facade with the same vectorized interface plus cache lookup."""
+
+    def __init__(self, backend=physics, cache: PhysicsCache = GLOBAL_PHYSICS_CACHE):
+        self.backend = backend
+        self.cache = cache
+
+    def run_until_stopping(
+        self, *, sheet_states: state.SheetStates, throws: state.Throws | None = None
+    ) -> state.SheetStates:
+        if throws is None:
+            # Retain compatibility for callers that already added the stone.
+            base_states = sheet_states
+            throws = state.Throws(
+                angle_deg=np.zeros(len(sheet_states.x)),
+                speed=np.zeros(len(sheet_states.x)),
+                turn=np.zeros(len(sheet_states.x), dtype=int),
+                y_val=np.zeros(len(sheet_states.x)),
+                team=np.zeros(len(sheet_states.x), dtype=int),
+            )
+        else:
+            base_states = sheet_states
+            sheet_states = state.add_stones_from_throws(sheet_states, throws)
+
+        count = sheet_states.x.shape[0]
+        if count == 0:
+            return self.backend.run_until_stopping(sheet_states=sheet_states)
+        key = _batch_key(base_states, throws)
+        cached = self.cache.get(key)
+        if cached is not None:
+            self.cache.hits += 1
+            return cached
+        self.cache.misses += 1
+        result = self.backend.run_until_stopping(sheet_states=sheet_states)
+        self.cache.physics_simulations += count
+        self.cache.put(key, result)
+        return result
+
+    def run_to_next_collision_or_stop(self, *, sheet_states: state.SheetStates):
+        """Expose the other physics-facade operation for drop-in use."""
+        return self.backend.run_to_next_collision_or_stop(sheet_states=sheet_states)
+
+
+cached_physics = CachedPhysics()
 
 
 def _legacy_random_sheet_states(
@@ -71,6 +196,7 @@ def make_experiment_setup(state_generator_version: str, *, seed: int = 0) -> Exp
     The value is intentionally explicit so experiment configuration and
     results can record which state distribution was used.
     """
+    np.random.seed(seed)
     if state_generator_version == "legacy_full":
         random_sheet_states = _legacy_random_sheet_states
     elif state_generator_version == "turn_based":
@@ -79,12 +205,13 @@ def make_experiment_setup(state_generator_version: str, *, seed: int = 0) -> Exp
         raise ValueError(
             "state_generator_version must be 'legacy_full' or 'turn_based'"
         )
+    rng = np.random.default_rng(seed)
     return ExperimentSetup(
         random_sheet_states=random_sheet_states,
         searcher=make_default_throw_searcher(seed),
         model_comparison_searcher=ThrowsGridSearcher(10, 10, 4),
         greedy_comparison_searcher=GridAndRandomThrowSearcher(
-            np.random.default_rng(seed), grid_size=(10, 10, 4)
+            rng, grid_size=(10, 10, 4)
         ),
     )
 
@@ -160,7 +287,8 @@ def fixed_validation_splits(
         raise ValueError("train_sizes must contain positive sizes")
     if validation_size < 1 or max(train_sizes) + validation_size > data.final_scores.size:
         raise ValueError("dataset is too small for the requested train/validation split")
-    indices = np.random.default_rng(seed).permutation(data.final_scores.size)
+    rng = np.random.default_rng(seed)
+    indices = rng.permutation(data.final_scores.size)
     validation_idx = indices[:validation_size]
     training_idx = indices[validation_size : validation_size + max(train_sizes)]
     validation = padded_training_data(
@@ -291,7 +419,13 @@ def train_model_with_validation(
 class GridAndRandomThrowSearcher:
     """Candidate searcher matching the scaling experiments: 768 grid + 432 random."""
 
-    def __init__(self, rng: np.random.Generator, grid_size=(8, 8, 4), random_count=36 * 4 * 3):
+    def __init__(
+        self, rng: np.random.Generator | None = None, grid_size=(8, 8, 4),
+        random_count=36 * 4 * 3, *, seed: int | None = None,
+    ):
+        if rng is not None and seed is not None:
+            raise ValueError("provide rng or seed, not both")
+        rng = rng if rng is not None else np.random.default_rng(seed)
         self.grid_searcher = ThrowsGridSearcher(*grid_size)
         self.random_searcher = RandomThrows(rng, random_count)
 
@@ -424,9 +558,7 @@ def policy_summary(comparison: PolicyComparison) -> dict[str, float]:
 
 
 def _candidate_results(sheet_states, throws, tiled_states):
-    return physics.run_until_stopping(
-        sheet_states=state.add_stones_from_throws(tiled_states, throws)
-    )
+    return cached_physics.run_until_stopping(sheet_states=tiled_states, throws=throws)
 
 
 def _choose_throw(sheet_states, team, searcher, scorer):
@@ -494,9 +626,7 @@ def rollout_to_terminal(sheet_states, models: Mapping[int, tuple[object, dataset
         else:
             model, normalizer = models[n + 1]
             throws = choose_model_throws(current, model, normalizer, max_stones, searcher, team)
-        current = physics.run_until_stopping(
-            sheet_states=state.add_stones_from_throws(current, throws)
-        )
+        current = cached_physics.run_until_stopping(sheet_states=current, throws=throws)
     return current, scoring.get_net_score_for_team(current, 0)
 
 
@@ -509,6 +639,7 @@ def generate_dataset(
     diagnostic_train_sizes: tuple[int, ...] = (),
     diagnostic_evaluation_size: int = 1000,
 ) -> SequentialDataset:
+    np.random.seed(seed)
     max_stones = 2 * N
     if not 1 <= i < max_stones:
         raise ValueError("i must be between 1 and 2N-1")
@@ -524,6 +655,8 @@ def generate_dataset(
         raise ValueError("diagnostic_train_sizes must be sorted and contain no duplicates")
     rng = np.random.default_rng(seed)
     searcher = searcher or GridAndRandomThrowSearcher(rng)
+    if isinstance(searcher, GridAndRandomThrowSearcher):
+        searcher.random_searcher.rng = rng
     random_sheet_states = random_sheet_states or _legacy_random_sheet_states
     parts_states, parts_scores = [], []
     pending_states, pending_scores = [], []
@@ -647,14 +780,12 @@ def compare_policies(
     )
     greedy_throw = choose_greedy_throws(sheet_states, searcher, team)
     model_after, model_scores = rollout_to_terminal(
-        physics.run_until_stopping(
-            sheet_states=state.add_stones_from_throws(sheet_states, model_throw)
-        ), models, max_stones, searcher
+        cached_physics.run_until_stopping(sheet_states=sheet_states, throws=model_throw),
+        models, max_stones, searcher
     )
     greedy_after, greedy_scores = rollout_to_terminal(
-        physics.run_until_stopping(
-            sheet_states=state.add_stones_from_throws(sheet_states, greedy_throw)
-        ), models, max_stones, searcher
+        cached_physics.run_until_stopping(sheet_states=sheet_states, throws=greedy_throw),
+        models, max_stones, searcher
     )
     return PolicyComparison(sheet_states, model_scores, greedy_scores, model_throw, greedy_throw)
 
@@ -874,6 +1005,7 @@ def train_sequential_models(
 
 
 def generate_final_dataset(models, *, k: int, fractions: Mapping[int, float], num_rows: int = 10_000, N: int = 5, seed: int = 0, random_sheet_states: RandomSheetStates | None = None) -> dataset.TrainingData:
+    np.random.seed(seed)
     max_stones = 2 * N
     counts = list(range(k, max_stones))
     if set(fractions) != set(counts) or any(v < 0 for v in fractions.values()) or not np.isclose(sum(fractions.values()), 1):

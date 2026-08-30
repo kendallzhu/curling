@@ -2,6 +2,7 @@ __pycache__/
 .py[cod]
 debugging.ipynb
 .ipynb_checkpoints/
+.sequential_training_physics_cache/
 curling.egg-info/
 venv/
 src/
