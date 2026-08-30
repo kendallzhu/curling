@@ -10,7 +10,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass
 import json
 from pathlib import Path
-from typing import Callable, Mapping
+from typing import Any, Callable, Mapping
 
 import numpy as np
 
@@ -22,7 +22,7 @@ import physics
 import scoring
 import state
 import stats
-from bot import RandomThrows, ThrowSearcher, ThrowsGridSearcher
+from bot import RandomThrows, ThrowSearcher, ThrowsGridSearcher, select_robust_throws
 
 
 RandomSheetStates = Callable[..., state.SheetStates]
@@ -319,7 +319,7 @@ def make_default_throw_searcher(seed: int = 0) -> GridAndRandomThrowSearcher:
 def evaluate_model(
     model, normalizer, data: dataset.TrainingData, *, N: int,
     num_bootstrap_samples: int = 1000, seed: int = 0,
-) -> object:
+) -> stats.NeuralNetStats:
     """Return the project's standard categorical prediction statistics."""
     evaluation_data = dataset.TrainingData(
         input_features=normalizer.normalize(data.raw_inputs),
@@ -434,10 +434,16 @@ def _choose_throw(sheet_states, team, searcher, scorer):
     n = sheet_states.x.shape[0]
     if n == 0:
         return state.Throws(*(np.array([]) for _ in range(5)))
-    result = _candidate_results(sheet_states, throws, tiled)
-    scores = np.asarray(scorer(result, team))
-    candidates = scores.reshape(-1, n).argmax(axis=0) * n + np.arange(n)
-    return state.Throws(*(getattr(throws, name)[candidates] for name in ("angle_deg", "speed", "turn", "y_val", "team")))
+
+    def score_throws(states, candidate_throws):
+        return np.asarray(scorer(_candidate_results(states, candidate_throws, states), team))
+
+    return select_robust_throws(
+        sheet_states=sheet_states,
+        candidate_throws=throws,
+        exact_scores=score_throws(tiled, throws),
+        scoring_function=score_throws,
+    )
 
 
 def choose_model_throws(sheet_states, model, normalizer, max_stones, searcher, team):
@@ -557,12 +563,10 @@ def generate_dataset(
         elif combined_states.x.shape[0]:
             pending_states.append(combined_states)
             pending_scores.append(combined_scores)
-    team0 = (i + 1) // 2
-    team1 = i // 2
     for start in range(0, num_rows, batch_size):
         count = min(batch_size, num_rows - start)
         initial = random_sheet_states(turn=i, num_sims=count, rng=rng)
-        final, scores = rollout_to_terminal(initial, models or {}, max_stones, searcher)
+        _, scores = rollout_to_terminal(initial, models or {}, max_stones, searcher)
         parts_states.append(initial)
         parts_scores.append(scores)
         pending_states.append(initial)
@@ -611,7 +615,7 @@ def write_policy_comparison(path: str | Path, comparison: PolicyComparison) -> N
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     s = comparison.initial_states
-    arrays = {
+    arrays: dict[str, Any] = {
         "first_team": s.first_team,
         "x": s.x,
         "y": s.y,
@@ -646,12 +650,12 @@ def compare_policies(
         sheet_states, model, normalizer, max_stones, model_searcher, team
     )
     greedy_throw = choose_greedy_throws(sheet_states, searcher, team)
-    model_after, model_scores = rollout_to_terminal(
+    _, model_scores = rollout_to_terminal(
         physics.run_until_stopping(
             sheet_states=state.add_stones_from_throws(sheet_states, model_throw)
         ), models, max_stones, searcher
     )
-    greedy_after, greedy_scores = rollout_to_terminal(
+    _, greedy_scores = rollout_to_terminal(
         physics.run_until_stopping(
             sheet_states=state.add_stones_from_throws(sheet_states, greedy_throw)
         ), models, max_stones, searcher
@@ -834,6 +838,7 @@ def train_sequential_models(
         )
 
         def diagnostic_callback(generated, train_size, model_index=i):
+            assert diagnostic_output_dir is not None
             train_diagnostic_model(
                 generated,
                 train_size=train_size,

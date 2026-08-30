@@ -15,6 +15,7 @@ from bot import (
     ThrowSearcher,
     ThrowsGridSearcher,
     add_noise_to_throw,
+    select_robust_throws,
     score_throws_by_net_score,
 )
 
@@ -495,19 +496,12 @@ def _grid_search_throws(
         candidate_throws = state.concat_throws([grid_throws, random_throws])
         candidate_states = state.concat([grid_states, random_states])
         scores = score_throws_by_net_score(candidate_states, candidate_throws)
-        num_sims = batch_states.x.shape[0]
-        n_candidates = scores.size // num_sims
-        chosen = (
-            scores.reshape(n_candidates, num_sims).argmax(axis=0) * num_sims
-            + np.arange(num_sims)
-        )
         parts.append(
-            state.Throws(
-                angle_deg=candidate_throws.angle_deg[chosen],
-                speed=candidate_throws.speed[chosen],
-                turn=candidate_throws.turn[chosen],
-                y_val=candidate_throws.y_val[chosen],
-                team=candidate_throws.team[chosen],
+            select_robust_throws(
+                sheet_states=batch_states,
+                candidate_throws=candidate_throws,
+                exact_scores=scores,
+                scoring_function=score_throws_by_net_score,
             )
         )
     return state.concat_throws(parts)

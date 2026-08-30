@@ -1,4 +1,5 @@
 import numpy as np
+from inline_snapshot import snapshot
 
 import bot
 import curling_nn
@@ -8,6 +9,62 @@ import physics
 import scoring
 from constants import NOT_IN_PLAY_X, center_line_y, center_of_target_house
 from state import SheetStates, Velocities, add_stones_from_throws
+
+
+def test_select_robust_throws_uses_weighted_angle_outcomes():
+    states = SheetStates(
+        first_team=np.array([0]),
+        x=np.zeros((1, 0)),
+        y=np.zeros((1, 0)),
+        velocities=Velocities(v=np.zeros((1, 0)), theta=np.zeros((1, 0))),
+        rotation_directions=np.zeros((1, 0), dtype=int),
+    )
+    candidates = bot.Throws(
+        angle_deg=np.arange(40, dtype=float),
+        speed=np.ones(40),
+        turn=np.zeros(40, dtype=int),
+        y_val=np.zeros(40),
+        team=np.zeros(40, dtype=int),
+    )
+    exact_scores = np.zeros(40)
+    exact_scores[-1] = 10.0
+    exact_scores[-2] = 9.9
+
+    evaluated_throws = []
+
+    def score_throws(_states, throws):
+        scores = np.where(np.abs(throws.angle_deg - 38.0) < 0.2, 10.0, 0.0)
+        evaluated_throws.extend(
+            {"angle": float(angle), "score": float(score)}
+            for angle, score in zip(throws.angle_deg, scores)
+        )
+        return scores
+
+    selected = bot.select_robust_throws(
+        sheet_states=states,
+        candidate_throws=candidates,
+        exact_scores=exact_scores,
+        scoring_function=score_throws,
+    )
+
+    observed = {
+        "extra_throw_scores": evaluated_throws,
+        "selected_throw": {
+            "angle": float(selected.angle_deg[0]),
+            "speed": float(selected.speed[0]),
+            "turn": int(selected.turn[0]),
+            "y": float(selected.y_val[0]),
+        },
+    }
+    assert observed == snapshot({
+    "extra_throw_scores": [
+        {"angle": 37.9, "score": 10.0},
+        {"angle": 38.1, "score": 10.0},
+        {"angle": 38.9, "score": 0.0},
+        {"angle": 39.1, "score": 0.0},
+    ],
+    "selected_throw": {"angle": 38.0, "speed": 1.0, "turn": 0, "y": 0.0},
+})
 
 
 def test_physics_ignores_not_in_play_placeholder_stones():
