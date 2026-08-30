@@ -60,7 +60,7 @@
             "approve": true,
             "matchCommandLine": true
         },
-        "/^\\.venv/bin/python -m pytest -q tests/test_data_generation\\.py$/": {
+        "/^venv/bin/python -m pytest -q tests/test_data_generation\\.py$/": {
             "approve": true,
             "matchCommandLine": true
         },

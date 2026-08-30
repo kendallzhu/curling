@@ -11,4 +11,7 @@ where = ["."]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
-
+addopts = "-m 'not slow'"
+markers = [
+    "slow: tests excluded from the default test run",
+]

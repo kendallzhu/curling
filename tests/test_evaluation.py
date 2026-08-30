@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 
 import bot
 import curling_nn
@@ -24,6 +25,7 @@ def test_sheet_state_evaluation_round_trip(tmp_path):
     )
 
 
+@pytest.mark.slow
 def test_second_to_last_policy_comparison_has_both_policies(tmp_path):
     states = evaluation.generate_second_to_last_evaluation_states(
         seed=0, num_sims=2

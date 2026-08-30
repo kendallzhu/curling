@@ -84,6 +84,7 @@ def test_stats_have_compact_human_readable_text():
     )
 
 
+@pytest.mark.slow
 def test_combined_stats_plot_has_calibration_and_loss_panels():
     matplotlib = pytest.importorskip("matplotlib")
     matplotlib.use("Agg")
@@ -100,6 +101,7 @@ def test_combined_stats_plot_has_calibration_and_loss_panels():
     matplotlib.pyplot.close(axes[0].figure)
 
 
+@pytest.mark.slow
 def test_combined_stats_plot_can_include_diagnostic_snapshots():
     matplotlib = pytest.importorskip("matplotlib")
     matplotlib.use("Agg")
@@ -116,6 +118,7 @@ def test_combined_stats_plot_can_include_diagnostic_snapshots():
     )
     assert len(axes) == 3
     assert axes[2].get_ylabel() == "evaluation cross-entropy loss"
+    assert axes[2].get_xscale() == "log"
     matplotlib.pyplot.close(axes[0].figure)
 
 

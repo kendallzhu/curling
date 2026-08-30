@@ -390,6 +390,7 @@ def plot_calibration_and_training_losses(
             ylabel="evaluation cross-entropy loss",
             title="Diagnostic snapshots",
         )
+        axs[2].set_xscale("log")
         axs[2].grid(alpha=0.25)
     if title:
         fig = axs[0].figure

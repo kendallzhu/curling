@@ -86,7 +86,7 @@ Robustness adds Gaussian release noise to maximum-score candidates and averages 
 
 ```bash
 # Activate the project environment if needed
-source .venv/bin/activate
+source venv/bin/activate
 
 # Run tests
 pytest -q

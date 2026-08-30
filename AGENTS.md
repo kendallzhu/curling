@@ -8,7 +8,7 @@
   pytest -q
   ```
 
-  Use the project virtualenv for all Python commands: `.venv/bin/python`.
+  Use the project virtualenv for all Python commands: `venv/bin/python`.
 
 ## Scratch notebook imports
 
