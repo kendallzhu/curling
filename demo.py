@@ -10,7 +10,7 @@ import threading
 
 from physics import run_to_next_collision_or_stop
 from scoring import get_score
-from data_generation import random_sheet_states
+from data_generation import generate_random_sheet_state_for_turn
 from presets import (
     demo_collisions_sheet_states,
     guard_sheet_states,
@@ -40,12 +40,15 @@ def _run_bot_suggestions(sheet_states, team, v_network, v_normalizer):
     bot_throw, bot_exact_score, bot_weighted_score = bot.get_throw_grid_search(
         sheet_states, team
     )
-    bot_throw_v, bot_v_exact_score, bot_v_weighted_score = bot.get_throw_v_argmax(
-        sheet_states,
-        team,
-        neural_network=v_network,
-        normalizer=v_normalizer,
-    )
+    try:
+        bot_throw_v, bot_v_exact_score, bot_v_weighted_score = bot.get_throw_v_argmax(
+            sheet_states,
+            team,
+            neural_network=v_network,
+            normalizer=v_normalizer,
+        )
+    except Exception:
+        bot_throw_v, bot_v_exact_score, bot_v_weighted_score = None, None, None
     return (
         bot_throw,
         bot_exact_score,
@@ -130,8 +133,8 @@ if __name__ == "__main__":
     window_width = 1800 * monitor_size_multiplier
     window_height = window_width / 2 + PANEL_H
     screen = pygame.display.set_mode((window_width, window_height), pygame.RESIZABLE)
-    previous_sheet_states = random_sheet_states(
-        team1=5, team2=4
+    previous_sheet_states = generate_random_sheet_state_for_turn(
+        turn=8, rng=np.random.default_rng()
     )  # guard_sheet_states()  # empty_board(1)
     timestep = 0.1
 
@@ -164,7 +167,9 @@ if __name__ == "__main__":
                 previous_sheet_states,
                 preset_states=(
                     demo_collisions_sheet_states,
-                    lambda: random_sheet_states(team1=4, team2=4),
+                    lambda: generate_random_sheet_state_for_turn(
+                        turn=8, rng=np.random.default_rng()
+                    ),
                 ),
             )
             if (

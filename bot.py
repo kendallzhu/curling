@@ -440,11 +440,9 @@ def get_throw_v_argmax(
     throw_searcher: ThrowSearcher | None = None,
     neural_network: curling_nn.ValueNetwork | None = None,
     normalizer: Normalizer | None = None,
-) -> tuple[Throw | None, float | None, float | None]:
+) -> tuple[Throw, float, float]:
     """Suggest a throw by simulating candidates and scoring the result with V.
 
-    Enabled only when the board is one stone short of the value network's
-    ``num_stones`` (second-to-last throw). Returns (None, None, None) otherwise.
     The floats are (exact_score, weighted_score) for the throwing team.
     """
     if throw_searcher is None:
@@ -453,8 +451,6 @@ def get_throw_v_argmax(
         neural_network, normalizer = curling_nn.load_v_weights(
             value_network_weights_path
         )
-    if state.x.shape[1] + 1 != neural_network.num_stones:
-        return None, None, None
     policy = ArgmaxThrowPolicy.from_value_network(
         neural_network=neural_network,
         normalizer=normalizer,

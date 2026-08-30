@@ -28,7 +28,7 @@ Vectorized curling simulation with Numba physics, actual scoring, grid-search an
   - `score_throws_by_net_score` runs physics and scores candidates.
   - `get_throw_grid_search` chooses a throw by weighted fixed-angle robustness.
   - `ArgmaxThrowPolicy` supports actual-score, Q-network, and value-network scoring.
-  - `get_throw_q_argmax` / `get_throw_v_argmax` load saved weights when a network is not supplied. V is enabled only for the second-to-last throw.
+  - `get_throw_q_argmax` / `get_throw_v_argmax` load saved weights when a network is not supplied.
 - `data_generation.py` – Dataset and batched throw-selection helpers.
   - `random_sheet_states` creates random boards.
   - `sample_throws_by_score_for_sheets` samples throws by score.
