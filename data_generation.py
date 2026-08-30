@@ -15,7 +15,6 @@ from bot import (
     RandomThrows,
     ThrowSearcher,
     ThrowsGridSearcher,
-    add_noise_to_throw,
     select_robust_throws,
     score_throws_by_net_score,
 )
@@ -295,32 +294,11 @@ def best_throws_for_sheets(
     sheet_states: state.SheetStates,
     team: int,
     throw_searcher: ThrowSearcher,
-    rng: np.random.Generator,
     scoring_function: Callable[
         [state.SheetStates, state.Throws], np.ndarray
     ] = score_throws_by_net_score,
-    num_robustness_samples: int = 20,
-    max_throws_to_evaluate: int | None = None,
 ) -> state.Throws:
-    """Return the most robust maximum-score throw for each sheet state.
-
-    The searcher's candidate throws are scored independently for every input
-    state.  Robustness is evaluated only for candidates attaining that state's
-    maximum score, and the candidate with the greatest noisy average score is
-    returned.  The returned throws have one entry per input state and are in
-    the same order as ``sheet_states``.  ``rng`` is used to break ties between
-    equally robust throws.
-    """
-    if num_robustness_samples < 1:
-        raise ValueError(
-            "num_robustness_samples must be >= 1, "
-            f"got {num_robustness_samples}"
-        )
-    if max_throws_to_evaluate is not None and max_throws_to_evaluate < 1:
-        raise ValueError(
-            "max_throws_to_evaluate must be >= 1 when set, "
-            f"got {max_throws_to_evaluate}"
-        )
+    """Return the most robust throw using fixed weighted angle offsets."""
     num_sims = sheet_states.x.shape[0]
     if num_sims == 0:
         return state.Throws(
@@ -338,91 +316,15 @@ def best_throws_for_sheets(
         raise ValueError(
             "throw_searcher must return a whole number of candidate throws per state"
         )
-    n_candidates = tiled_states.x.shape[0] // num_sims
     if candidate_throws.angle_deg.shape[0] != tiled_states.x.shape[0]:
         raise ValueError("throw_searcher returned mismatched throws and states")
 
-    scores = scoring_function(tiled_states, candidate_throws).reshape(
-        (n_candidates, num_sims)
-    )
-    best_candidate_lists: list[list[state.Throw]] = []
-    for sim in range(num_sims):
-        max_score = np.max(scores[:, sim])
-        best_candidate_indices = np.flatnonzero(scores[:, sim] == max_score)
-        if (
-            max_throws_to_evaluate is not None
-            and best_candidate_indices.size > max_throws_to_evaluate
-        ):
-            best_candidate_indices = rng.choice(
-                best_candidate_indices,
-                size=max_throws_to_evaluate,
-                replace=False,
-            )
-        candidate_list = [
-            state.Throw(
-                angle_deg=float(candidate_throws.angle_deg[i * num_sims + sim]),
-                speed=float(candidate_throws.speed[i * num_sims + sim]),
-                turn=int(candidate_throws.turn[i * num_sims + sim]),
-                y_val=float(candidate_throws.y_val[i * num_sims + sim]),
-                team=int(candidate_throws.team[i * num_sims + sim]),
-            )
-            for i in best_candidate_indices
-        ]
-        best_candidate_lists.append(candidate_list)
-
-    # Evaluate every robustness candidate in one physics batch.  The ordering
-    # matches simulate_average_scores_with_noise: state, candidate, sample.
-    num_noise_samples = num_robustness_samples
-    noisy_throws: list[state.Throw] = []
-    noisy_state_indices: list[int] = []
-    candidate_offsets: list[tuple[int, int]] = []
-    for sim, candidate_list in enumerate(best_candidate_lists):
-        for candidate_idx, candidate in enumerate(candidate_list):
-            candidate_offsets.append((sim, candidate_idx))
-            for _ in range(num_noise_samples):
-                noisy_throws.append(add_noise_to_throw(candidate))
-                noisy_state_indices.append(sim)
-
-    noisy_throws_data = state.Throws(
-        angle_deg=np.asarray([throw.angle_deg for throw in noisy_throws]),
-        speed=np.asarray([throw.speed for throw in noisy_throws]),
-        turn=np.asarray([throw.turn for throw in noisy_throws], dtype=int),
-        y_val=np.asarray([throw.y_val for throw in noisy_throws]),
-        team=np.asarray([throw.team for throw in noisy_throws], dtype=int),
-    )
-    noisy_states = state.take_sheet_states(
-        sheet_states, np.asarray(noisy_state_indices, dtype=int)
-    )
-    final_noisy_states = cached_physics.run_until_stopping(
-        sheet_states=state.add_stones_from_throws(noisy_states, noisy_throws_data)
-    )
-    noisy_scores = scoring.get_net_score_for_team(final_noisy_states, team)
-    robustness = np.asarray(
-        [
-            noisy_scores[i * num_noise_samples : (i + 1) * num_noise_samples].mean()
-            for i in range(len(candidate_offsets))
-        ]
-    )
-
-    selected: list[state.Throw] = []
-    for sim, candidate_list in enumerate(best_candidate_lists):
-        candidate_robustness = np.asarray(
-            [
-                robustness[i]
-                for i, (candidate_sim, _) in enumerate(candidate_offsets)
-                if candidate_sim == sim
-            ]
-        )
-        max_robustness = np.max(candidate_robustness)
-        best_robust_indices = np.flatnonzero(candidate_robustness == max_robustness)
-        selected.append(candidate_list[int(rng.choice(best_robust_indices))])
-
-    return state.Throws(
-        angle_deg=np.asarray([throw.angle_deg for throw in selected]),
-        speed=np.asarray([throw.speed for throw in selected]),
-        turn=np.asarray([throw.turn for throw in selected], dtype=int),
-        y_val=np.asarray([throw.y_val for throw in selected]),
-        team=np.asarray([throw.team for throw in selected], dtype=int),
+    scores = scoring_function(tiled_states, candidate_throws)
+    return select_robust_throws(
+        sheet_states=sheet_states,
+        candidate_throws=candidate_throws,
+        exact_scores=scores,
+        scoring_function=scoring_function,
     )
 
 

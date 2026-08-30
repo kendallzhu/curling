@@ -26,13 +26,13 @@ Vectorized curling simulation with Numba physics, actual scoring, grid-search an
   - `ThrowsGridSearcher` generates candidate throws in candidate-major/state-minor order.
   - `RandomThrows` generates random candidates.
   - `score_throws_by_net_score` runs physics and scores candidates.
-  - `get_throw_grid_search` chooses a maximum-score throw and then evaluates robustness under noisy throws.
+  - `get_throw_grid_search` chooses a throw by weighted fixed-angle robustness.
   - `ArgmaxThrowPolicy` supports actual-score, Q-network, and value-network scoring.
   - `get_throw_q_argmax` / `get_throw_v_argmax` load saved weights when a network is not supplied. V is enabled only for the second-to-last throw.
 - `data_generation.py` – Dataset and batched throw-selection helpers.
   - `random_sheet_states` creates random boards.
   - `sample_throws_by_score_for_sheets` samples throws by score.
-  - `best_throws_for_sheets` selects maximum-score, maximum-robustness throws. It returns only `Throws`, in the same order as the input states. Robustness is vectorized across states and candidates; `num_robustness_samples` defaults to 20 and `max_throws_to_evaluate` can cap candidates.
+  - `best_throws_for_sheets` selects robust throws using fixed weighted angle offsets. It returns only `Throws`, in the same order as the input states.
   - `scoring_function_of_nn` creates a Q-network expected-score function.
   - `scoring_function_of_nn_score_std` creates a function returning predicted score standard deviation from the Q distribution.
   - `best_throws_for_sheets_by_nn` selects throws using only Q-network predictions, without physics or actual scoring.
@@ -80,7 +80,7 @@ The Q network predicts team-0 net score. Scoring helpers multiply by `1` for tea
 
 ### Robustness
 
-Robustness adds Gaussian release noise to maximum-score candidates and averages actual simulated net scores. `best_throws_for_sheets` batches these simulations. Lower `num_robustness_samples` or set `max_throws_to_evaluate` when speed matters.
+Robustness ranks the top 5% of exact-score candidates using fixed release-angle offsets: 0.0 degrees (50%), -0.1 degrees (25%), and +0.1 degrees (25%).
 
 ## Common commands
 

@@ -37,7 +37,7 @@ def _quit_demo() -> None:
 
 
 def _run_bot_suggestions(sheet_states, team, v_network, v_normalizer):
-    bot_throw, bot_target_score, bot_robust_score = bot.get_throw_grid_search(
+    bot_throw, bot_exact_score, bot_weighted_score = bot.get_throw_grid_search(
         sheet_states, team
     )
     bot_throw_v, bot_v_expected_score = bot.get_throw_v_argmax(
@@ -48,8 +48,8 @@ def _run_bot_suggestions(sheet_states, team, v_network, v_normalizer):
     )
     return (
         bot_throw,
-        bot_target_score,
-        bot_robust_score,
+        bot_exact_score,
+        bot_weighted_score,
         bot_throw_v,
         bot_v_expected_score,
     )
@@ -184,8 +184,8 @@ if __name__ == "__main__":
             pygame.display.flip()
             (
                 bot_throw,
-                bot_target_score,
-                bot_robust_score,
+                bot_exact_score,
+                bot_weighted_score,
                 bot_throw_v,
                 bot_v_expected_score,
             ) = _compute_bot_suggestions_interruptibly(
@@ -196,7 +196,7 @@ if __name__ == "__main__":
             )
             print("Bot chosen throw:", bot_throw)
             print(
-                f"Bot target score: {bot_target_score}, robust score: {bot_robust_score}"
+                f"Bot exact score: {bot_exact_score}, weighted average score: {bot_weighted_score}"
             )
             ui_state.bot_throw = bot_throw
 

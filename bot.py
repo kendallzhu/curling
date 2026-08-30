@@ -9,9 +9,7 @@ from state import (
     SheetStates,
     Velocities,
     add_new_stone,
-    add_new_stones,
     add_stones_from_throws,
-    add_noise_to_throw,
     tile_sheet_states,
     take_sheet_states,
     empty_board,
@@ -57,21 +55,6 @@ def simulate_score_after_throw(
     return score
 
 
-def simulate_average_scores_with_noise(
-    state: SheetStates, throws: list[Throw], num_samples: int = 20
-) -> np.ndarray:
-    # for each throw, generate num_samples noisy versions
-    noisy_throws = [add_noise_to_throw(t) for t in throws for _ in range(num_samples)]
-    noisy_state = tile_sheet_states(state, len(noisy_throws))
-    noisy_state = add_new_stones(noisy_state, noisy_throws)
-    final_state = cached_physics.run_until_stopping(sheet_states=noisy_state)
-    scores = scoring.get_net_score_for_team(
-        final_state, throws[0].team
-    )  # (len(throws) * num_samples,)
-    # reshape and average over samples for each throw
-    return scores.reshape(len(throws), num_samples).mean(axis=1)  # (len(throws),)
-
-
 class CurlingPolicy(Protocol):
     def make_throws(
         self, sheet_states: SheetStates, team: int, rng: np.random.Generator
@@ -95,7 +78,24 @@ class ThrowPerturbations:
 DEFAULT_THROW_PERTURBATIONS = ThrowPerturbations()
 
 
-def select_robust_throws(
+def perturb_throw(
+    throw: Throw,
+    perturbations: ThrowPerturbations = DEFAULT_THROW_PERTURBATIONS,
+) -> Throw:
+    """Sample a release from the fixed angle perturbation distribution."""
+    angle_offset = np.random.choice(
+        perturbations.angle_offsets_deg, p=perturbations.probabilities
+    )
+    return Throw(
+        angle_deg=throw.angle_deg + angle_offset,
+        speed=throw.speed,
+        turn=throw.turn,
+        y_val=throw.y_val,
+        team=throw.team,
+    )
+
+
+def _select_robust_throws_and_scores(
     *,
     sheet_states: SheetStates,
     candidate_throws: Throws,
@@ -103,7 +103,7 @@ def select_robust_throws(
     scoring_function: Callable[[SheetStates, Throws], np.ndarray],
     perturbations: ThrowPerturbations = DEFAULT_THROW_PERTURBATIONS,
     top_fraction: float = 0.05,
-) -> Throws:
+) -> tuple[Throws, np.ndarray, np.ndarray]:
     """Choose top exact candidates by their weighted perturbed value.
 
     Candidates use the standard candidate-major, state-minor layout. Exact
@@ -111,7 +111,7 @@ def select_robust_throws(
     """
     num_sims = sheet_states.x.shape[0]
     if num_sims == 0:
-        return Throws(*(np.array([]) for _ in range(5)))
+        return Throws(*(np.array([]) for _ in range(5))), np.array([]), np.array([])
     if candidate_throws.angle_deg.size % num_sims:
         raise ValueError("candidate throws must contain the same count for every state")
     if not 0 < top_fraction <= 1:
@@ -151,13 +151,38 @@ def select_robust_throws(
     ).reshape(num_selected, num_sims)
     winners = weighted_scores.argmax(axis=0)
     chosen = top_candidates[winners, np.arange(num_sims)] * num_sims + np.arange(num_sims)
-    return Throws(
-        angle_deg=candidate_throws.angle_deg[chosen],
-        speed=candidate_throws.speed[chosen],
-        turn=candidate_throws.turn[chosen],
-        y_val=candidate_throws.y_val[chosen],
-        team=candidate_throws.team[chosen],
+    return (
+        Throws(
+            angle_deg=candidate_throws.angle_deg[chosen],
+            speed=candidate_throws.speed[chosen],
+            turn=candidate_throws.turn[chosen],
+            y_val=candidate_throws.y_val[chosen],
+            team=candidate_throws.team[chosen],
+        ),
+        scores.ravel()[chosen],
+        weighted_scores[winners, np.arange(num_sims)],
     )
+
+
+def select_robust_throws(
+    *,
+    sheet_states: SheetStates,
+    candidate_throws: Throws,
+    exact_scores: np.ndarray,
+    scoring_function: Callable[[SheetStates, Throws], np.ndarray],
+    perturbations: ThrowPerturbations = DEFAULT_THROW_PERTURBATIONS,
+    top_fraction: float = 0.05,
+) -> Throws:
+    """Choose top exact candidates by their weighted perturbed value."""
+    selected_throws, _, _ = _select_robust_throws_and_scores(
+        sheet_states=sheet_states,
+        candidate_throws=candidate_throws,
+        exact_scores=exact_scores,
+        scoring_function=scoring_function,
+        perturbations=perturbations,
+        top_fraction=top_fraction,
+    )
+    return selected_throws
 
 
 class ThrowSearcher(Protocol):
@@ -219,38 +244,6 @@ class ThrowsGridSearcher(ThrowSearcher):
 
         tiled_sheet_states = tile_sheet_states(sheet_states, n_throws)
         return throws, tiled_sheet_states
-
-
-def get_most_robust_throw_with_score(
-    *,
-    state: SheetStates,
-    throws: list[Throw],
-    scores: np.ndarray,
-    target_score: float,
-    max_throws_to_evaluate: int,
-) -> tuple[Throw, float]:
-    best_throws = [
-        throw for throw, score in zip(throws, scores) if score == target_score
-    ]
-    assert (
-        len(best_throws) > 0
-    )  # if we get to min score, we should find something robust for it
-    print(
-        f"Found {len(best_throws)} throws with max score {target_score}, evaluating robustness..."
-    )
-    if len(best_throws) > max_throws_to_evaluate:
-        print(
-            f"Evaluating robustness for {max_throws_to_evaluate} randomly selected throws out of {len(best_throws)}"
-        )
-        indices = np.random.choice(
-            len(best_throws), size=max_throws_to_evaluate, replace=False
-        )
-        best_throws = [best_throws[i] for i in indices]
-
-    robust_scores = simulate_average_scores_with_noise(state, best_throws)
-    max_robust_score = np.max(robust_scores)
-    best_idx = int(np.random.choice(np.where(robust_scores == max_robust_score)[0]))
-    return best_throws[best_idx], max_robust_score
 
 
 def get_throw_q_argmax(
@@ -357,41 +350,30 @@ def get_throw_v_argmax(
 
 
 def get_throw_grid_search(state: SheetStates, team: int) -> tuple[Throw, float, float]:
-    candidate_throws = ThrowsGridSearcher(
-        num_angles=20, num_speeds=20, num_y_vals=6
-    ).get_throws(team)
-    num_combos = candidate_throws.angle_deg.shape[0]
+    throw_searcher = ThrowsGridSearcher(num_angles=20, num_speeds=20, num_y_vals=6)
+    candidate_throws, tiled_states = throw_searcher.get_throws_for_num_sims(
+        team=team, sheet_states=state
+    )
+    num_combos = candidate_throws.angle_deg.shape[0] // state.x.shape[0]
     print(f"Grid search: evaluating {num_combos} throws")
-
-    throws = [
+    scores = score_throws_by_net_score(tiled_states, candidate_throws)
+    selected_throws, selected_exact_scores, weighted_scores = _select_robust_throws_and_scores(
+        sheet_states=state,
+        candidate_throws=candidate_throws,
+        exact_scores=scores,
+        scoring_function=score_throws_by_net_score,
+    )
+    return (
         Throw(
-            angle_deg=float(candidate_throws.angle_deg[i]),
-            speed=float(candidate_throws.speed[i]),
-            turn=int(candidate_throws.turn[i]),
-            y_val=float(candidate_throws.y_val[i]),
-            team=team,
-        )
-        for i in range(num_combos)
-    ]
-    tiled_state = tile_sheet_states(state, num_combos)
-    tiled_state = add_new_stones(tiled_state, throws)
-
-    final_state = cached_physics.run_until_stopping(sheet_states=tiled_state)
-    scores = scoring.get_net_score_for_team(final_state, team)  # (num_combos,)
-
-    target_score = np.max(scores)
-    max_throws_to_evaluate = num_combos // 20
-    while True:
-        best_throw, robust_score = get_most_robust_throw_with_score(
-            state=state,
-            throws=throws,
-            scores=scores,
-            target_score=target_score,
-            max_throws_to_evaluate=max_throws_to_evaluate,
-        )
-        if robust_score >= target_score - 1:
-            return best_throw, target_score, robust_score
-        target_score -= 1
+            angle_deg=float(selected_throws.angle_deg[0]),
+            speed=float(selected_throws.speed[0]),
+            turn=int(selected_throws.turn[0]),
+            y_val=float(selected_throws.y_val[0]),
+            team=int(selected_throws.team[0]),
+        ),
+        float(selected_exact_scores[0]),
+        float(weighted_scores[0]),
+    )
 
 
 class RandomThrows(ThrowSearcher):

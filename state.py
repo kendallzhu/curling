@@ -282,13 +282,3 @@ def add_new_stones(state: SheetStates, throws: list[Throw]) -> SheetStates:
         rotation_directions=new_rotation,
         velocities=Velocities(v=new_v, theta=new_theta),
     )
-
-
-def add_noise_to_throw(throw: Throw) -> Throw:
-    return Throw(
-        angle_deg=throw.angle_deg + np.random.normal(0, 0.005),
-        speed=throw.speed + np.random.normal(0, 0.005),
-        turn=throw.turn,
-        y_val=throw.y_val + np.random.normal(0, 0.005),
-        team=throw.team,
-    )

@@ -24,8 +24,8 @@ from state import (
     SheetState,
     empty_board,
     add_new_stone,
-    add_noise_to_throw,
 )
+from bot import perturb_throw
 
 PANEL_H = 80  # pixels of control panel below the sheet
 SLIDER_BAR_HEIGHT = 10
@@ -373,11 +373,17 @@ def render_ui(surface, ui_state: UIState, score, next_team: int):
 
 
 def _apply_suggested_throw(ui_state: UIState, sheet_states, throw: Throw):
-    next_sheet_states = add_new_stone(sheet_states, throw)
-    ui_state.angle_val = throw.angle_deg
-    ui_state.speed_val = throw.speed
-    ui_state.y_val = throw.y_val
-    ui_state.turn_val = throw.turn
+    released_throw = perturb_throw(throw)
+    if released_throw.angle_deg != throw.angle_deg:
+        print(
+            "*** BOT THROW PERTURBED *** "
+            f"angle offset {released_throw.angle_deg - throw.angle_deg:+.3f} deg"
+        )
+    next_sheet_states = add_new_stone(sheet_states, released_throw)
+    ui_state.angle_val = released_throw.angle_deg
+    ui_state.speed_val = released_throw.speed
+    ui_state.y_val = released_throw.y_val
+    ui_state.turn_val = released_throw.turn
     return next_sheet_states
 
 
@@ -431,7 +437,6 @@ def handle_mouse_input(
                 y_val=ui_state.y_val,
                 team=next_team_to_play,
             )
-            # throw = add_noise_to_throw(throw)
             next_sheet_states = add_new_stone(next_sheet_states, throw)
         elif bot_btn_rect.collidepoint(mx, my) and ui_state.bot_throw:
             if not current_sheet_states.is_any_stone_moving():
