@@ -261,26 +261,26 @@ def draw_panel(
         (btn_rect.x + 8, btn_rect.y + 10),
     )
 
-    # Bot throw button
-    bot_btn_rect = pygame.Rect(125, panel_y + 20, 95, 40)
+    # Bot Greedy button
+    bot_btn_rect = pygame.Rect(125, panel_y + 20, 100, 40)
     btn_color = (160, 120, 80) if bot_throw else (80, 80, 80)
     pygame.draw.rect(surface, btn_color, bot_btn_rect, border_radius=6)
     surface.blit(
-        font.render("Bot Throw", True, (255, 255, 255)),
+        font.render("Bot Greedy", True, (255, 255, 255)),
         (bot_btn_rect.x + 5, bot_btn_rect.y + 10),
     )
 
-    # Bot throw V button (second-to-last throw only)
-    bot_v_btn_rect = pygame.Rect(230, panel_y + 20, 120, 40)
+    # Bot NN button
+    bot_v_btn_rect = pygame.Rect(235, panel_y + 20, 100, 40)
     v_btn_color = (120, 100, 160) if bot_throw_v else (80, 80, 80)
     pygame.draw.rect(surface, v_btn_color, bot_v_btn_rect, border_radius=6)
     surface.blit(
-        font.render("Bot Throw V", True, (255, 255, 255)),
-        (bot_v_btn_rect.x + 5, bot_v_btn_rect.y + 10),
+        font.render("Bot NN", True, (255, 255, 255)),
+        (bot_v_btn_rect.x + 12, bot_v_btn_rect.y + 10),
     )
 
     # Turn toggle
-    turn_x = 360
+    turn_x = 345
     turn_rect = pygame.Rect(turn_x, panel_y + 20, 100, 40)
     pygame.draw.rect(surface, TURN_COLOURS[turn_val], turn_rect, border_radius=6)
     surface.blit(
