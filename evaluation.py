@@ -159,19 +159,10 @@ def grid_search_best_throws(
     throw_searcher: bot.ThrowSearcher,
 ) -> state.Throws:
     """Choose throws by actual score after that throw only."""
-    candidate_throws, tiled_states = throw_searcher.get_throws_for_num_sims(
-        team=team, sheet_states=sheet_states
+    policy = bot.ArgmaxThrowPolicy.max_single_turn_score(
+        throw_searcher=throw_searcher,
     )
-    final_states = cached_physics.run_until_stopping(
-        sheet_states=state.add_stones_from_throws(tiled_states, candidate_throws)
-    )
-    scores = scoring.get_net_score_for_team(final_states, team)
-    return bot.select_robust_throws(
-        sheet_states=sheet_states,
-        candidate_throws=candidate_throws,
-        exact_scores=scores,
-        scoring_function=bot.score_throws_by_net_score,
-    )
+    return policy.make_throws(sheet_states, team)
 
 
 def value_network_best_throws(
@@ -182,36 +173,12 @@ def value_network_best_throws(
     normalizer: dataset.Normalizer,
 ) -> state.Throws:
     """Choose throws by value on each resulting 9-stone state."""
-    candidate_throws, tiled_states = throw_searcher.get_throws_for_num_sims(
-        team=team, sheet_states=sheet_states
+    policy = bot.ArgmaxThrowPolicy.from_value_network(
+        neural_network=value_network,
+        normalizer=normalizer,
+        throw_searcher=throw_searcher,
     )
-    after_throw = cached_physics.run_until_stopping(
-        sheet_states=state.add_stones_from_throws(tiled_states, candidate_throws)
-    )
-    features = curling_nn.VInputFeatures.create_of_sheet_states(
-        after_throw, normalizer
-    )
-    expected_scores = value_network.expected_score(
-        value_network.run(features[:, :, None])
-    )
-    scores_from_team = np.where(candidate_throws.team == 0, 1, -1) * expected_scores
-
-    def score_throws(states: state.SheetStates, throws: state.Throws) -> np.ndarray:
-        after_throw = cached_physics.run_until_stopping(
-            sheet_states=state.add_stones_from_throws(states, throws)
-        )
-        features = curling_nn.VInputFeatures.create_of_sheet_states(
-            after_throw, normalizer
-        )
-        expected = value_network.expected_score(value_network.run(features[:, :, None]))
-        return np.where(throws.team == 0, 1, -1) * expected
-
-    return bot.select_robust_throws(
-        sheet_states=sheet_states,
-        candidate_throws=candidate_throws,
-        exact_scores=scores_from_team,
-        scoring_function=score_throws,
-    )
+    return policy.make_throws(sheet_states, team)
 
 
 def compare_second_to_last_policies(

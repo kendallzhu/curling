@@ -40,7 +40,7 @@ def _run_bot_suggestions(sheet_states, team, v_network, v_normalizer):
     bot_throw, bot_exact_score, bot_weighted_score = bot.get_throw_grid_search(
         sheet_states, team
     )
-    bot_throw_v, bot_v_expected_score = bot.get_throw_v_argmax(
+    bot_throw_v, bot_v_exact_score, bot_v_weighted_score = bot.get_throw_v_argmax(
         sheet_states,
         team,
         neural_network=v_network,
@@ -51,7 +51,8 @@ def _run_bot_suggestions(sheet_states, team, v_network, v_normalizer):
         bot_exact_score,
         bot_weighted_score,
         bot_throw_v,
-        bot_v_expected_score,
+        bot_v_exact_score,
+        bot_v_weighted_score,
     )
 
 
@@ -187,7 +188,8 @@ if __name__ == "__main__":
                 bot_exact_score,
                 bot_weighted_score,
                 bot_throw_v,
-                bot_v_expected_score,
+                bot_v_exact_score,
+                bot_v_weighted_score,
             ) = _compute_bot_suggestions_interruptibly(
                 next_sheet_states,
                 next_team_to_play,
@@ -201,8 +203,10 @@ if __name__ == "__main__":
             ui_state.bot_throw = bot_throw
 
             print("Bot V chosen throw:", bot_throw_v)
-            if bot_v_expected_score is not None:
-                print(f"Bot V expected score: {bot_v_expected_score}")
+            if bot_v_exact_score is not None:
+                print(
+                    f"Bot V exact score: {bot_v_exact_score}, weighted average score: {bot_v_weighted_score}"
+                )
             ui_state.bot_throw_v = bot_throw_v
 
         pygame.display.flip()

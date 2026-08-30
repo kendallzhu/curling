@@ -121,6 +121,15 @@ class Throws:
     y_val: np.ndarray
     team: np.ndarray
 
+    def get_throw(self, index: int = 0) -> Throw:
+        return Throw(
+            angle_deg=float(self.angle_deg[index]),
+            speed=float(self.speed[index]),
+            turn=int(self.turn[index]),
+            y_val=float(self.y_val[index]),
+            team=int(self.team[index]),
+        )
+
 
 def concat_throws(throws_list: list[Throws]) -> Throws:
     return Throws(

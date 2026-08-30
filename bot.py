@@ -246,136 +246,6 @@ class ThrowsGridSearcher(ThrowSearcher):
         return throws, tiled_sheet_states
 
 
-def get_throw_q_argmax(
-    state: SheetStates,
-    team: int,
-    *,
-    seed: int = 0,
-    throw_searcher: ThrowSearcher | None = None,
-    neural_network: curling_nn.QNetwork | None = None,
-    normalizer: Normalizer | None = None,
-) -> tuple[Throw | None, float | None]:
-    """Suggest a throw via ArgmaxThrowPolicy.from_q_network.
-
-    Returns (None, None) if the board stone count does not match the network.
-    The float is the Q-network expected net score for the throwing team.
-    """
-    if throw_searcher is None:
-        throw_searcher = ThrowsGridSearcher(num_angles=20, num_speeds=20, num_y_vals=6)
-    if neural_network is None or normalizer is None:
-        neural_network, normalizer = curling_nn.load_q_weights(
-            q_network_weights_path
-        )
-    if state.x.shape[1] != neural_network.num_stones:
-        return None, None
-    policy = ArgmaxThrowPolicy.from_q_network(
-        random_action_prob=0.0,
-        neural_network=neural_network,
-        normalizer=normalizer,
-        throw_searcher=throw_searcher,
-    )
-    throws = policy.make_throws(state, team, np.random.default_rng(seed))
-    throw = Throw(
-        angle_deg=float(throws.angle_deg[0]),
-        speed=float(throws.speed[0]),
-        turn=int(throws.turn[0]),
-        y_val=float(throws.y_val[0]),
-        team=int(throws.team[0]),
-    )
-    expected_score = float(
-        policy.scoring_function(
-            state,
-            Throws(
-                angle_deg=throws.angle_deg[:1],
-                speed=throws.speed[:1],
-                turn=throws.turn[:1],
-                y_val=throws.y_val[:1],
-                team=throws.team[:1],
-            ),
-        )[0]
-    )
-    return throw, expected_score
-
-
-def get_throw_v_argmax(
-    state: SheetStates,
-    team: int,
-    *,
-    seed: int = 0,
-    throw_searcher: ThrowSearcher | None = None,
-    neural_network: curling_nn.ValueNetwork | None = None,
-    normalizer: Normalizer | None = None,
-) -> tuple[Throw | None, float | None]:
-    """Suggest a throw by simulating candidates and scoring the result with V.
-
-    Enabled only when the board is one stone short of the value network's
-    ``num_stones`` (second-to-last throw). Returns (None, None) otherwise.
-    The float is V's expected net score for the throwing team after the throw.
-    """
-    if throw_searcher is None:
-        throw_searcher = ThrowsGridSearcher(num_angles=20, num_speeds=20, num_y_vals=6)
-    if neural_network is None or normalizer is None:
-        neural_network, normalizer = curling_nn.load_v_weights(
-            value_network_weights_path
-        )
-    if state.x.shape[1] + 1 != neural_network.num_stones:
-        return None, None
-    policy = ArgmaxThrowPolicy.from_value_network(
-        random_action_prob=0.0,
-        neural_network=neural_network,
-        normalizer=normalizer,
-        throw_searcher=throw_searcher,
-    )
-    throws = policy.make_throws(state, team, np.random.default_rng(seed))
-    throw = Throw(
-        angle_deg=float(throws.angle_deg[0]),
-        speed=float(throws.speed[0]),
-        turn=int(throws.turn[0]),
-        y_val=float(throws.y_val[0]),
-        team=int(throws.team[0]),
-    )
-    expected_score = float(
-        policy.scoring_function(
-            state,
-            Throws(
-                angle_deg=throws.angle_deg[:1],
-                speed=throws.speed[:1],
-                turn=throws.turn[:1],
-                y_val=throws.y_val[:1],
-                team=throws.team[:1],
-            ),
-        )[0]
-    )
-    return throw, expected_score
-
-
-def get_throw_grid_search(state: SheetStates, team: int) -> tuple[Throw, float, float]:
-    throw_searcher = ThrowsGridSearcher(num_angles=20, num_speeds=20, num_y_vals=6)
-    candidate_throws, tiled_states = throw_searcher.get_throws_for_num_sims(
-        team=team, sheet_states=state
-    )
-    num_combos = candidate_throws.angle_deg.shape[0] // state.x.shape[0]
-    print(f"Grid search: evaluating {num_combos} throws")
-    scores = score_throws_by_net_score(tiled_states, candidate_throws)
-    selected_throws, selected_exact_scores, weighted_scores = _select_robust_throws_and_scores(
-        sheet_states=state,
-        candidate_throws=candidate_throws,
-        exact_scores=scores,
-        scoring_function=score_throws_by_net_score,
-    )
-    return (
-        Throw(
-            angle_deg=float(selected_throws.angle_deg[0]),
-            speed=float(selected_throws.speed[0]),
-            turn=int(selected_throws.turn[0]),
-            y_val=float(selected_throws.y_val[0]),
-            team=int(selected_throws.team[0]),
-        ),
-        float(selected_exact_scores[0]),
-        float(weighted_scores[0]),
-    )
-
-
 class RandomThrows(ThrowSearcher):
     def __init__(self, rng: np.random.Generator, n_throws_to_generate: int):
         self.rng = rng
@@ -426,29 +296,33 @@ def score_throws_by_net_score(sheet_states: SheetStates, throws: Throws) -> np.n
 class ArgmaxThrowPolicy(CurlingPolicy):
     def __init__(
         self,
-        random_action_prob: float,
-        throw_searcher: ThrowSearcher,
         scoring_function: Callable[[SheetStates, Throws], np.ndarray],
+        throw_searcher: ThrowSearcher,
+        random_action_prob: float = 0.0,
     ):
         self.scoring_function = scoring_function
         self.random_action_prob = random_action_prob
         self.throw_searcher = throw_searcher
 
     @classmethod
-    def max_single_turn_score(cls, random_action_prob: float, throw_searcher: ThrowSearcher):
+    def max_single_turn_score(
+        cls,
+        throw_searcher: ThrowSearcher,
+        random_action_prob: float = 0.0,
+    ):
         return cls(
-            random_action_prob=random_action_prob,
             scoring_function=score_throws_by_net_score,
             throw_searcher=throw_searcher,
+            random_action_prob=random_action_prob,
         )
 
     @classmethod
     def from_q_network(
         cls,
-        random_action_prob: float,
         neural_network: curling_nn.QNetwork,
         normalizer: Normalizer,
         throw_searcher: ThrowSearcher,
+        random_action_prob: float = 0.0,
     ):
         def scoring_function(sheet_states: SheetStates, throws: Throws) -> np.ndarray:
             input_features = curling_nn.QInputFeatures.create_of_sheet_states(
@@ -460,18 +334,18 @@ class ArgmaxThrowPolicy(CurlingPolicy):
             return np.where(throws.team == 0, 1, -1) * expected
 
         return cls(
-            random_action_prob=random_action_prob,
             scoring_function=scoring_function,
             throw_searcher=throw_searcher,
+            random_action_prob=random_action_prob,
         )
 
     @classmethod
     def from_value_network(
         cls,
-        random_action_prob: float,
         neural_network: curling_nn.ValueNetwork,
         normalizer: Normalizer,
         throw_searcher: ThrowSearcher,
+        random_action_prob: float = 0.0,
     ):
         def scoring_function(sheet_states: SheetStates, throws: Throws) -> np.ndarray:
             final_states = cached_physics.run_until_stopping(
@@ -485,24 +359,135 @@ class ArgmaxThrowPolicy(CurlingPolicy):
             return np.where(throws.team == 0, 1, -1) * expected
 
         return cls(
-            random_action_prob=random_action_prob,
             scoring_function=scoring_function,
             throw_searcher=throw_searcher,
+            random_action_prob=random_action_prob,
         )
 
-    def make_throws(
-        self, sheet_states: SheetStates, team: int, rng: np.random.Generator
-    ):
+    def make_throws_and_scores(
+        self,
+        sheet_states: SheetStates,
+        team: int,
+        rng: np.random.Generator | None = None,
+        perturbations: ThrowPerturbations = DEFAULT_THROW_PERTURBATIONS,
+        top_fraction: float = 0.05,
+    ) -> tuple[Throws, np.ndarray, np.ndarray]:
         repeated_throws, tiled_starting_states = self.throw_searcher.get_throws_for_num_sims(
             team=team, sheet_states=sheet_states
         )
         scores = self.scoring_function(tiled_starting_states, repeated_throws)
-        return select_robust_throws(
+        return _select_robust_throws_and_scores(
             sheet_states=sheet_states,
             candidate_throws=repeated_throws,
             exact_scores=scores,
             scoring_function=self.scoring_function,
+            perturbations=perturbations,
+            top_fraction=top_fraction,
         )
+
+    def make_throws(
+        self,
+        sheet_states: SheetStates,
+        team: int,
+        rng: np.random.Generator | None = None,
+    ) -> Throws:
+        throws, _, _ = self.make_throws_and_scores(sheet_states, team, rng)
+        return throws
+
+
+def get_throw_q_argmax(
+    state: SheetStates,
+    team: int,
+    *,
+    seed: int = 0,
+    throw_searcher: ThrowSearcher | None = None,
+    neural_network: curling_nn.QNetwork | None = None,
+    normalizer: Normalizer | None = None,
+) -> tuple[Throw | None, float | None, float | None]:
+    """Suggest a throw via ArgmaxThrowPolicy.from_q_network.
+
+    Returns (None, None, None) if the board stone count does not match the network.
+    The floats are (exact_score, weighted_score) for the throwing team.
+    """
+    if throw_searcher is None:
+        throw_searcher = ThrowsGridSearcher(num_angles=20, num_speeds=20, num_y_vals=6)
+    if neural_network is None or normalizer is None:
+        neural_network, normalizer = curling_nn.load_q_weights(
+            q_network_weights_path
+        )
+    if state.x.shape[1] != neural_network.num_stones:
+        return None, None, None
+    policy = ArgmaxThrowPolicy.from_q_network(
+        neural_network=neural_network,
+        normalizer=normalizer,
+        throw_searcher=throw_searcher,
+    )
+    throws, exact_scores, weighted_scores = policy.make_throws_and_scores(
+        state, team, np.random.default_rng(seed)
+    )
+    return (
+        throws.get_throw(0),
+        float(exact_scores[0]),
+        float(weighted_scores[0]),
+    )
+
+
+def get_throw_v_argmax(
+    state: SheetStates,
+    team: int,
+    *,
+    seed: int = 0,
+    throw_searcher: ThrowSearcher | None = None,
+    neural_network: curling_nn.ValueNetwork | None = None,
+    normalizer: Normalizer | None = None,
+) -> tuple[Throw | None, float | None, float | None]:
+    """Suggest a throw by simulating candidates and scoring the result with V.
+
+    Enabled only when the board is one stone short of the value network's
+    ``num_stones`` (second-to-last throw). Returns (None, None, None) otherwise.
+    The floats are (exact_score, weighted_score) for the throwing team.
+    """
+    if throw_searcher is None:
+        throw_searcher = ThrowsGridSearcher(num_angles=20, num_speeds=20, num_y_vals=6)
+    if neural_network is None or normalizer is None:
+        neural_network, normalizer = curling_nn.load_v_weights(
+            value_network_weights_path
+        )
+    if state.x.shape[1] + 1 != neural_network.num_stones:
+        return None, None, None
+    policy = ArgmaxThrowPolicy.from_value_network(
+        neural_network=neural_network,
+        normalizer=normalizer,
+        throw_searcher=throw_searcher,
+    )
+    throws, exact_scores, weighted_scores = policy.make_throws_and_scores(
+        state, team, np.random.default_rng(seed)
+    )
+    return (
+        throws.get_throw(0),
+        float(exact_scores[0]),
+        float(weighted_scores[0]),
+    )
+
+
+def get_throw_grid_search(state: SheetStates, team: int) -> tuple[Throw, float, float]:
+    throw_searcher = ThrowsGridSearcher(num_angles=20, num_speeds=20, num_y_vals=6)
+    policy = ArgmaxThrowPolicy.max_single_turn_score(throw_searcher=throw_searcher)
+    num_combos = (
+        throw_searcher.num_angles
+        * throw_searcher.num_speeds
+        * throw_searcher.num_y_vals
+        * len(turn_options)
+    )
+    print(f"Grid search: evaluating {num_combos} throws")
+    throws, exact_scores, weighted_scores = policy.make_throws_and_scores(
+        state, team, np.random.default_rng(0)
+    )
+    return (
+        throws.get_throw(0),
+        float(exact_scores[0]),
+        float(weighted_scores[0]),
+    )
 
 
 def run_games(

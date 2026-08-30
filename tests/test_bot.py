@@ -7,6 +7,7 @@ import data_generation
 import dataset
 import physics
 import scoring
+import state
 from constants import NOT_IN_PLAY_X, center_line_y, center_of_target_house
 from state import SheetStates, Velocities, add_stones_from_throws
 
@@ -146,7 +147,7 @@ def test_get_throw_v_argmax_only_when_one_stone_short_of_v():
     searcher = bot.ThrowsGridSearcher(2, 2, 1)
 
     too_many = data_generation.random_sheet_states(team1=1, team2=1, num_sims=1)
-    throw, score = bot.get_throw_v_argmax(
+    throw, exact_score, weighted_score = bot.get_throw_v_argmax(
         too_many,
         0,
         throw_searcher=searcher,
@@ -154,10 +155,11 @@ def test_get_throw_v_argmax_only_when_one_stone_short_of_v():
         normalizer=normalizer,
     )
     assert throw is None
-    assert score is None
+    assert exact_score is None
+    assert weighted_score is None
 
     sheet = data_generation.random_sheet_states(team1=1, team2=0, num_sims=1)
-    throw, score = bot.get_throw_v_argmax(
+    throw, exact_score, weighted_score = bot.get_throw_v_argmax(
         sheet,
         1,
         throw_searcher=searcher,
@@ -166,4 +168,70 @@ def test_get_throw_v_argmax_only_when_one_stone_short_of_v():
     )
     assert throw is not None
     assert throw.team == 1
-    assert score is not None
+    assert exact_score is not None
+    assert weighted_score is not None
+
+
+def test_get_throw_q_argmax_returns_scores():
+    neural_network = curling_nn.QNetwork(seed=0, num_stones=1, hidden_layer_size=4)
+    raw = curling_nn.QInputFeatures.raw_of_sheet_states(
+        data_generation.random_sheet_states(team1=1, team2=0, num_sims=1),
+        state.Throws(
+            angle_deg=np.array([0.0]),
+            speed=np.array([2.0]),
+            turn=np.array([0]),
+            y_val=np.array([2.5]),
+            team=np.array([1]),
+        ),
+    )
+    normalizer = dataset.Normalizer.from_features(raw)
+    searcher = bot.ThrowsGridSearcher(2, 2, 1)
+
+    wrong_stone_count = data_generation.random_sheet_states(team1=1, team2=1, num_sims=1)
+    throw, exact_score, weighted_score = bot.get_throw_q_argmax(
+        wrong_stone_count,
+        0,
+        throw_searcher=searcher,
+        neural_network=neural_network,
+        normalizer=normalizer,
+    )
+    assert throw is None
+    assert exact_score is None
+    assert weighted_score is None
+
+    matching_sheet = data_generation.random_sheet_states(team1=1, team2=0, num_sims=1)
+    throw, exact_score, weighted_score = bot.get_throw_q_argmax(
+        matching_sheet,
+        1,
+        throw_searcher=searcher,
+        neural_network=neural_network,
+        normalizer=normalizer,
+    )
+    assert throw is not None
+    assert throw.team == 1
+    assert exact_score is not None
+    assert weighted_score is not None
+
+
+def test_throws_get_throw():
+    throws = state.Throws(
+        angle_deg=np.array([1.5, -2.0]),
+        speed=np.array([2.1, 2.3]),
+        turn=np.array([0, 1]),
+        y_val=np.array([2.4, 2.6]),
+        team=np.array([0, 1]),
+    )
+    t0 = throws.get_throw(0)
+    assert isinstance(t0, state.Throw)
+    assert t0.angle_deg == 1.5
+    assert t0.speed == 2.1
+    assert t0.turn == 0
+    assert t0.y_val == 2.4
+    assert t0.team == 0
+
+    t1 = throws.get_throw(1)
+    assert t1.angle_deg == -2.0
+    assert t1.speed == 2.3
+    assert t1.turn == 1
+    assert t1.y_val == 2.6
+    assert t1.team == 1
