@@ -71,6 +71,7 @@ def test_padded_features_have_fixed_width_and_one_hot_throw_flags():
     states = data_generation.random_sheet_states(team1=2, team2=1, num_sims=3)
     raw = sequential.raw_padded_sheet_state_features(states, max_stones=6)
 
+    assert sequential.feature_width(6) == sequential.curling_nn.value_feature_width(6)
     assert raw.shape == (3, sequential.feature_width(6))
     np.testing.assert_array_equal(raw[:, 1:4], 0)
     np.testing.assert_array_equal(raw[:, 4:7], 1)
@@ -161,6 +162,10 @@ def test_model_checkpoint_round_trip(tmp_path):
     )
     path = tmp_path / "model.npz"
     sequential.write_model(path, model, normalizer)
+    with np.load(path) as saved:
+        assert int(saved["value_feature_format_version"]) == (
+            sequential.curling_nn.VALUE_FEATURE_FORMAT_VERSION
+        )
     loaded, loaded_normalizer = sequential.load_model(path)
     for expected, actual in zip(model.linear_layers(), loaded.linear_layers()):
         np.testing.assert_array_equal(expected.weights, actual.weights)

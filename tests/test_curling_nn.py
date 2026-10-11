@@ -1,3 +1,5 @@
+from typing import Any
+
 import numpy as np
 import pytest
 
@@ -22,6 +24,10 @@ def test_write_and_load_v_weights(tmp_path):
     )
     path = tmp_path / "v_weights.npz"
     curling_nn.write_v_weights(path, neural_network, normalizer)
+    with np.load(path) as data:
+        assert int(data["value_feature_format_version"]) == (
+            curling_nn.VALUE_FEATURE_FORMAT_VERSION
+        )
     loaded_nn, loaded_norm = curling_nn.load_v_weights(path)
 
     assert loaded_nn.num_stones == num_stones
@@ -47,6 +53,32 @@ def test_load_v_weights_rejects_legacy_feature_width(tmp_path):
     )
 
     with pytest.raises(ValueError, match="incompatible value checkpoint"):
+        curling_nn.load_v_weights(path)
+
+
+def test_load_v_weights_handles_unversioned_and_unknown_versions(tmp_path):
+    neural_network = curling_nn.ValueNetwork(seed=0, num_stones=2)
+    normalizer = dataset.Normalizer(
+        feature_means=np.zeros(curling_nn.value_feature_width(2)),
+        feature_stdevs=np.ones(curling_nn.value_feature_width(2)),
+    )
+    path = tmp_path / "v_weights.npz"
+    curling_nn.write_v_weights(path, neural_network, normalizer)
+    with np.load(path) as data:
+        arrays: dict[str, Any] = {
+            name: np.array(data[name], copy=True) for name in data.files
+        }
+
+    arrays.pop("value_feature_format_version")
+    np.savez(path, **arrays)
+    loaded_network, _ = curling_nn.load_v_weights(path)
+    assert loaded_network.num_stones == 2
+
+    arrays["value_feature_format_version"] = np.asarray(
+        curling_nn.VALUE_FEATURE_FORMAT_VERSION + 1
+    )
+    np.savez(path, **arrays)
+    with pytest.raises(ValueError, match="unsupported value feature format version"):
         curling_nn.load_v_weights(path)
 
 

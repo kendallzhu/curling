@@ -237,7 +237,7 @@ def make_experiment_setup(
 
 
 def feature_width(max_stones: int) -> int:
-    return 1 + 6 * max_stones
+    return curling_nn.value_feature_width(max_stones)
 
 
 def raw_padded_sheet_state_features(
@@ -504,6 +504,9 @@ def write_model(path: str | Path, model, normalizer: dataset.Normalizer) -> None
         "num_stones": np.asarray(model.num_stones),
         "hidden_layer_size": np.asarray(model.hidden_layer_size),
         "num_stones_per_side": np.asarray(model.num_stones_per_side),
+        "value_feature_format_version": np.asarray(
+            curling_nn.VALUE_FEATURE_FORMAT_VERSION
+        ),
         "feature_means": normalizer.feature_means,
         "feature_stdevs": normalizer.feature_stdevs,
     }
@@ -515,6 +518,7 @@ def write_model(path: str | Path, model, normalizer: dataset.Normalizer) -> None
 
 def load_model(path: str | Path):
     with np.load(path) as z:
+        curling_nn.validate_value_checkpoint_format(z)
         model = make_model(
             seed=0,
             max_stones=int(z["num_stones"]),
