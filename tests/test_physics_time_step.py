@@ -58,9 +58,9 @@ def test_time_step_limit_matches_unlimited_on_empty_board():
                 "greater_than_0.1": 0,
             },
             "percentile_distances": {
-                "p90": '5.69e-14',
-                "p99": '1.07e-13',
-                "p100": '3.62e-13',
+                "p90": "5.69e-14",
+                "p99": "1.07e-13",
+                "p100": "3.62e-13",
             },
         }
     )
@@ -87,9 +87,9 @@ def test_time_step_limit_vs_unlimited_with_collisions():
                 "greater_than_0.1": 0,
             },
             "percentile_distances": {
-                "p90": '6.39e-08',
-                "p99": '7.69e-07',
-                "p100": '1.23e-05',
+                "p90": "6.39e-08",
+                "p99": "7.69e-07",
+                "p100": "1.23e-05",
             },
         }
     )

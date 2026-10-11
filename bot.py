@@ -82,8 +82,8 @@ def _select_robust_throws_and_scores(
     exact_scores: np.ndarray,
     scoring_function: Callable[[SheetStates, Throws], np.ndarray],
     perturbations: ThrowPerturbations = DEFAULT_THROW_PERTURBATIONS,
-    top_fraction: float = 0.05,
-    randomly_pick_between_top_n: int = 2,
+    top_fraction_to_perturb: float = 0.05,
+    randomly_pick_between_top_n: int = 5,
     random_candidates_must_be_within: float = 0.1,
     rng: np.random.Generator | None = None,
 ) -> tuple[Throws, np.ndarray, np.ndarray]:
@@ -103,12 +103,12 @@ def _select_robust_throws_and_scores(
         return Throws(*(np.array([]) for _ in range(5))), np.array([]), np.array([])
     if candidate_throws.angle_deg.size % num_sims:
         raise ValueError("candidate throws must contain the same count for every state")
-    if not 0 < top_fraction <= 1:
+    if not 0 < top_fraction_to_perturb <= 1:
         raise ValueError("top_fraction must be in (0, 1]")
 
     num_candidates = candidate_throws.angle_deg.size // num_sims
     scores = np.asarray(exact_scores).reshape(num_candidates, num_sims)
-    num_selected = max(1, math.ceil(num_candidates * top_fraction))
+    num_selected = max(1, math.ceil(num_candidates * top_fraction_to_perturb))
     top_candidates = np.argsort(scores, axis=0)[-num_selected:]
     sim_indices = np.broadcast_to(np.arange(num_sims), top_candidates.shape)
     candidate_indices = (top_candidates * num_sims + sim_indices).ravel()
@@ -178,7 +178,7 @@ def select_robust_throws(
         exact_scores=exact_scores,
         scoring_function=scoring_function,
         perturbations=perturbations,
-        top_fraction=top_fraction,
+        top_fraction_to_perturb=top_fraction,
         randomly_pick_between_top_n=randomly_pick_between_top_n,
         random_candidates_must_be_within=random_candidates_must_be_within,
         rng=rng,
@@ -369,7 +369,7 @@ class ArgmaxThrowPolicy(CurlingPolicy):
             exact_scores=scores,
             scoring_function=self.scoring_function,
             perturbations=perturbations,
-            top_fraction=top_fraction,
+            top_fraction_to_perturb=top_fraction,
             randomly_pick_between_top_n=randomly_pick_between_top_n,
             random_candidates_must_be_within=random_candidates_must_be_within,
             rng=rng,
