@@ -7,6 +7,7 @@ checkpointing, and training loop.
 
 from __future__ import annotations
 
+from collections.abc import Callable, Sequence
 from dataclasses import asdict, dataclass
 import json
 from pathlib import Path
@@ -28,19 +29,17 @@ import sequential_training as seq
 
 @dataclass(frozen=True)
 class SelfPlayConfig:
+    start_turn: int
+    max_stones: int
+    num_stones_per_side: int
     num_states: int = 500
     num_iterations: int = 30
     grid_size: tuple[int, int, int] = (10, 10, 4)
-    state_generator_version: str = "turn_based"
-    start_turn: int = 7
     halflife: float = 5.0
-    max_stones: int = 10
-    num_stones_per_side: int = 5
     hidden_layer_size: int = 20
     batch_size: int = 100
     training_iterations: int = 30
     learning_rate: float = 0.5
-    validation_fraction: float = 0.0
     robust_top_fraction: float = 0.05
     perturbations: ThrowPerturbations = DEFAULT_THROW_PERTURBATIONS
 
@@ -123,68 +122,117 @@ def _choose_throw(
     )
 
 
+ThrowPolicy = Callable[[state.SheetStates, int], state.Throws]
+
+
+def model_throw_policy(
+    model,
+    normalizer: dataset.Normalizer,
+    searcher: ThrowsGridSearcher,
+    config: SelfPlayConfig,
+) -> ThrowPolicy:
+    """Robust grid search that ranks candidates by the value network."""
+
+    def policy(states, team):
+        def utility(candidate_states):
+            scores = _model_scores(
+                model, normalizer,
+                _pad_states(candidate_states, config.max_stones), config.max_stones,
+            )
+            return scores if team == 0 else -scores
+
+        return _choose_throw(
+            states, team, searcher, utility, utility,
+            config.perturbations, config.robust_top_fraction,
+        )
+
+    return policy
+
+
+def greedy_throw_policy(
+    searcher: ThrowsGridSearcher, config: SelfPlayConfig
+) -> ThrowPolicy:
+    """Robust grid search that ranks candidates by the actual resulting score."""
+
+    def policy(states, team):
+        def utility(candidate_states):
+            return scoring.get_net_score_for_team(candidate_states, team)
+
+        return _choose_throw(
+            states, team, searcher, utility, utility,
+            config.perturbations, config.robust_top_fraction,
+        )
+
+    return policy
+
+
+def rollout_games(
+    start_states: state.SheetStates,
+    team0_policy: ThrowPolicy,
+    team1_policy: ThrowPolicy,
+    *,
+    config: SelfPlayConfig,
+    rng: np.random.Generator,
+) -> tuple[list[state.SheetStates], state.SheetStates]:
+    """Play to max_stones; return boards before each throw and the final board.
+
+    The last throw always uses the actual-score policy.
+    """
+    final_policy = greedy_throw_policy(
+        ThrowsGridSearcher(*config.grid_size), config
+    )
+    current = start_states
+    visited = []
+    num_throws = config.max_stones - config.start_turn
+    for throw_index in range(num_throws):
+        visited.append(current)
+        team = int(current.next_team_to_play()[0])
+        is_last_throw = throw_index == num_throws - 1
+        policy = final_policy if is_last_throw else (team0_policy, team1_policy)[team]
+        throws = policy(current, team)
+        current = seq.cached_physics.run_until_stopping(
+            sheet_states=current,
+            throws=perturb_throws(throws, config.perturbations, rng),
+        )
+    return visited, current
+
+
+def label_visited_states(
+    visited: Sequence[state.SheetStates],
+    final_state: state.SheetStates,
+    *,
+    config: SelfPlayConfig,
+) -> seq.SequentialDataset:
+    """Label every visited board with the final team-0 net score."""
+    final_scores = scoring.get_net_score_for_team(final_state, 0)
+    rows = state.concat([_pad_states(states, config.max_stones) for states in visited])
+    labels = np.tile(final_scores, len(visited))
+    return seq.SequentialDataset(
+        rows, labels, config.max_stones, config.num_stones_per_side
+    )
+
+
 def generate_self_play_batch(
     model,
     normalizer: dataset.Normalizer,
     *,
     config: SelfPlayConfig,
     rng: np.random.Generator,
-) -> tuple[seq.SequentialDataset, state.SheetStates]:
+) -> seq.SequentialDataset:
     """Generate labeled states from a sampled turn through the penultimate turn."""
-    if config.state_generator_version != "turn_based":
-        raise ValueError("self-play currently requires state_generator_version='turn_based'")
     if not 0 <= config.start_turn < config.max_stones:
         raise ValueError(
             f"start_turn must be in [0, {config.max_stones - 1}], got {config.start_turn}"
         )
     generator = seq.data_generation.generate_random_sheet_state_for_turn
-    current = generator(
-        turn=config.start_turn, num_sims=config.num_states, rng=rng
-    )
-    training_states = [current]
+    start = generator(turn=config.start_turn, num_sims=config.num_states, rng=rng)
     searcher = ThrowsGridSearcher(*config.grid_size)
 
-    def model_utility(states):
-        scores = _model_scores(model, normalizer, _pad_states(states, config.max_stones), config.max_stones)
-        return scores if team == 0 else -scores
-
-    for _ in range(config.start_turn + 1, config.max_stones):
-        team = int(current.next_team_to_play()[0])
-        model_throw = _choose_throw(
-            current, team, searcher, model_utility, model_utility,
-            config.perturbations, config.robust_top_fraction,
-        )
-        current = seq.cached_physics.run_until_stopping(
-            sheet_states=current,
-            throws=perturb_throws(model_throw, config.perturbations, rng),
-        )
-        training_states.append(current)
-
-    team = int(current.next_team_to_play()[0])
-
-    def actual_utility(states):
-        return scoring.get_net_score_for_team(states, team)
-
-    final_throw = _choose_throw(
-        current, team, searcher, actual_utility, actual_utility,
-        config.perturbations, config.robust_top_fraction,
+    model_policy = model_throw_policy(model, normalizer, searcher, config)
+    visited, final_state = rollout_games(
+        start, model_policy, model_policy, config=config, rng=rng
     )
-    final_state = seq.cached_physics.run_until_stopping(
-        sheet_states=current,
-        throws=perturb_throws(final_throw, config.perturbations, rng),
-    )
-    final_scores = scoring.get_net_score_for_team(final_state, 0)
-
-    rows = state.concat(
-        [_pad_states(states, config.max_stones) for states in training_states]
-    )
-    labels = np.tile(final_scores, len(training_states))
-    return (
-        seq.SequentialDataset(
-            rows, labels, config.max_stones, config.num_stones_per_side
-        ),
-        final_state,
-    )
+    return label_visited_states(visited, final_state, config=config)
 
 
 def retain_and_combine(
@@ -322,7 +370,7 @@ def run_self_play(
             "config": asdict(config),
             "notebook_parameters": notebook_parameters,
             "training_data_generation": {
-                "state_generator_version": config.state_generator_version,
+                "state_generator_version": "turn_based",
                 "sampled_start_turn": config.start_turn,
                 "sampled_start_states_per_iteration": config.num_states,
                 "model_controlled_turns": list(
@@ -426,7 +474,9 @@ def run_self_play(
     results = {}
     for i in range(start, config.num_iterations + 1):
         rng = np.random.default_rng(seed + i)
-        generated, _ = generate_self_play_batch(model, normalizer, config=config, rng=rng)
+        generated = generate_self_play_batch(
+            model, normalizer, config=config, rng=rng
+        )
         combined = retain_and_combine(previous, generated, halflife=config.halflife, rng=rng)
         model, normalizer, epoch_metrics = train_from_weights(
             model, combined, config=config, seed=seed + i

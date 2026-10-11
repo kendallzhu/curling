@@ -153,7 +153,6 @@ def _make_notebook_setup(
         num_states=num_states_per_iteration,
         num_iterations=num_iterations,
         grid_size=grid_size,
-        state_generator_version=state_generator_version,
         start_turn=self_play_start_turn,
         halflife=halflife,
         max_stones=2 * N,
