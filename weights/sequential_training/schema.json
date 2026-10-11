@@ -57,6 +57,11 @@
       "meaning": "Score range is +/- this value.",
       "shape": []
     },
+    "value_feature_format_version": {
+      "dtype": "int64",
+      "meaning": "Version of the padded value-network input feature representation.",
+      "shape": []
+    },
     "w0": {
       "dtype": "float64",
       "shape": [

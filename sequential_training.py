@@ -506,6 +506,9 @@ def write_model(path: str | Path, model, normalizer: dataset.Normalizer) -> None
         "num_stones": np.asarray(model.num_stones),
         "hidden_layer_size": np.asarray(model.hidden_layer_size),
         "num_stones_per_side": np.asarray(model.num_stones_per_side),
+        "value_feature_format_version": np.asarray(
+            curling_nn.VALUE_FEATURE_FORMAT_VERSION
+        ),
         "feature_means": normalizer.feature_means,
         "feature_stdevs": normalizer.feature_stdevs,
     }
@@ -592,6 +595,7 @@ def ensure_model_checkpoint_run_dir(run_dir: str | Path) -> Path:
             "num_stones": {"dtype": "int64", "shape": [], "meaning": "Padded board width."},
             "hidden_layer_size": {"dtype": "int64", "shape": [], "meaning": "Hidden layer width."},
             "num_stones_per_side": {"dtype": "int64", "shape": [], "meaning": "Score range is +/- this value."},
+            "value_feature_format_version": {"dtype": "int64", "shape": [], "meaning": "Version of the padded value-network input feature representation."},
             "feature_means": {"dtype": "float64", "shape": ["1 + 6 * num_stones"], "meaning": "Input feature means."},
             "feature_stdevs": {"dtype": "float64", "shape": ["1 + 6 * num_stones"], "meaning": "Input feature standard deviations."},
             "w0": {"dtype": "float64", "shape": ["hidden_layer_size", "1 + 6 * num_stones"]},
@@ -619,6 +623,7 @@ def ensure_model_checkpoint_run_dir(run_dir: str | Path) -> Path:
 
 def load_model(path: str | Path):
     with np.load(path) as z:
+        curling_nn.validate_value_checkpoint_format(z)
         model = make_model(
             seed=0,
             max_stones=int(z["num_stones"]),

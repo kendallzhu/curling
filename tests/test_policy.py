@@ -2,8 +2,45 @@ import numpy as np
 
 import bot
 import curling_nn
+import dataset
 import state
 from constants import NOT_IN_PLAY_X
+
+
+def test_value_network_scoring_flips_to_throwing_team_perspective(monkeypatch):
+    network = curling_nn.ValueNetwork(seed=0, num_stones=1, hidden_layer_size=4)
+    network.expected_score = lambda outputs: np.full(outputs.shape[0], 2.0)
+    normalizer = dataset.Normalizer(
+        feature_means=np.zeros(7), feature_stdevs=np.ones(7)
+    )
+    policy = bot.ArgmaxThrowPolicy.from_value_network(
+        neural_network=network,
+        normalizer=normalizer,
+        throw_searcher=bot.ThrowsGridSearcher(1, 1, 1),
+    )
+    monkeypatch.setattr(
+        bot.cached_physics,
+        "run_until_stopping",
+        lambda *, sheet_states: sheet_states,
+    )
+    boards = state.SheetStates(
+        first_team=np.array([0, 1]),
+        x=np.zeros((2, 0)),
+        y=np.zeros((2, 0)),
+        velocities=state.Velocities(v=np.zeros((2, 0)), theta=np.zeros((2, 0))),
+        rotation_directions=np.zeros((2, 0), dtype=int),
+    )
+    throws = state.Throws(
+        angle_deg=np.zeros(2),
+        speed=np.full(2, 2.0),
+        turn=np.zeros(2, dtype=int),
+        y_val=np.full(2, 2.5),
+        team=np.array([0, 1]),
+    )
+
+    scores = policy.scoring_function(boards, throws)
+
+    np.testing.assert_array_equal(scores, [2.0, -2.0])
 
 
 def test_robustness_selects_consistent_throw_over_fragile_peak():

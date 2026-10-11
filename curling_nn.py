@@ -11,6 +11,34 @@ import state
 from constants import house_outer_circle_radius, STONE_RADIUS_M
 
 
+VALUE_FEATURE_FORMAT_VERSION = 1
+
+
+def value_feature_width(max_stones: int) -> int:
+    """Return the feature width for the padded self-play value format."""
+    return 1 + 6 * max_stones
+
+
+def validate_value_checkpoint_format(data) -> int:
+    """Validate a value checkpoint and return its padded stone-slot count."""
+    num_stones = int(data["num_stones"])
+    if "value_feature_format_version" in data:
+        version = int(data["value_feature_format_version"])
+        if version != VALUE_FEATURE_FORMAT_VERSION:
+            raise ValueError(
+                f"unsupported value feature format version {version}; "
+                f"expected {VALUE_FEATURE_FORMAT_VERSION}"
+            )
+    input_width = int(data["w0"].shape[1])
+    expected_input_width = value_feature_width(num_stones)
+    if input_width != expected_input_width:
+        raise ValueError(
+            f"incompatible value checkpoint: expected {expected_input_width} "
+            f"padded value features, found {input_width}"
+        )
+    return num_stones
+
+
 def raw_padded_sheet_state_features(
     sheet_states: state.SheetStates, max_stones: int
 ) -> np.ndarray:
@@ -190,7 +218,7 @@ class ValueNetwork(ScoreNetwork):
         super().__init__(
             seed=seed,
             num_stones=num_stones,
-            input_layer_size=1 + 6 * num_stones,
+            input_layer_size=value_feature_width(num_stones),
             hidden_layer_size=hidden_layer_size,
             num_stones_per_side=num_stones_per_side,
             output_layer_size=output_layer_size,
@@ -208,6 +236,7 @@ def _write_score_weights(
         "num_stones": np.asarray(neural_network.num_stones),
         "hidden_layer_size": np.asarray(neural_network.hidden_layer_size),
         "num_stones_per_side": np.asarray(neural_network.num_stones_per_side),
+        "value_feature_format_version": np.asarray(VALUE_FEATURE_FORMAT_VERSION),
         "feature_means": np.asarray(normalizer.feature_means),
         "feature_stdevs": np.asarray(normalizer.feature_stdevs),
     }
@@ -241,18 +270,11 @@ def load_v_weights(
     path: str | Path,
 ) -> tuple[ValueNetwork, dataset.Normalizer]:
     with np.load(path) as data:
-        num_stones = int(data["num_stones"])
+        num_stones = validate_value_checkpoint_format(data)
         if "num_stones_per_side" in data:
             num_stones_per_side = int(data["num_stones_per_side"])
         else:
             num_stones_per_side = (num_stones + 1) // 2
-        input_width = int(data["w0"].shape[1])
-        expected_input_width = 1 + 6 * num_stones
-        if input_width != expected_input_width:
-            raise ValueError(
-                f"incompatible value checkpoint: expected {expected_input_width} "
-                f"self-play features, found {input_width}"
-            )
         neural_network = ValueNetwork(
             seed=0,
             num_stones=num_stones,
