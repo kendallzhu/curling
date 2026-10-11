@@ -146,7 +146,7 @@ if __name__ == "__main__":
 
     ui_state = UIState()
     v_network, v_normalizer = curling_nn.load_v_weights(
-        "weights/self_play/round9_2k_v3/checkpoints/m_10.npz"
+        "weights/self_play/round9_2k_v4/checkpoints/m_10.npz"
     )
 
     next_team_to_play = 1
