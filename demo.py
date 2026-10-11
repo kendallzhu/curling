@@ -140,13 +140,13 @@ if __name__ == "__main__":
     window_height = window_width / 2 + PANEL_H
     screen = pygame.display.set_mode((window_width, window_height), pygame.RESIZABLE)
     previous_sheet_states = generate_random_sheet_state_for_turn(
-        turn=6, rng=np.random.default_rng()
+        turn=5, rng=np.random.default_rng()
     )  # guard_sheet_states()  # empty_board(1)
     timestep = 0.1
 
     ui_state = UIState()
     v_network, v_normalizer = curling_nn.load_v_weights(
-        "weights/self_play/round9_2k_v4/checkpoints/m_10.npz"
+        "weights/self_play/round9_2k_v5_start6/checkpoints/m_12.npz"
     )
 
     next_team_to_play = 1
@@ -174,7 +174,7 @@ if __name__ == "__main__":
                 preset_states=(
                     demo_collisions_sheet_states,
                     lambda: generate_random_sheet_state_for_turn(
-                        turn=6, rng=np.random.default_rng()
+                        turn=5, rng=np.random.default_rng()
                     ),
                 ),
             )
