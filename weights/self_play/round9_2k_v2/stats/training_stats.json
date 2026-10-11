@@ -1,0 +1,87 @@
+{
+  "category": "self_play",
+  "run_name": "round9_2k_v2",
+  "seed": 0,
+  "iterations": {
+    "1": {
+      "new_rows": 600,
+      "training_rows": 18074,
+      "loss": [
+        0.607019354
+      ],
+      "final_training_loss": 0.607019354
+    },
+    "2": {
+      "new_rows": 600,
+      "training_rows": 16334,
+      "loss": [
+        0.580014636
+      ],
+      "final_training_loss": 0.580014636
+    },
+    "3": {
+      "new_rows": 600,
+      "training_rows": 14809,
+      "loss": [
+        0.57464775
+      ],
+      "final_training_loss": 0.57464775
+    },
+    "4": {
+      "new_rows": 600,
+      "training_rows": 13516,
+      "loss": [
+        0.584254568
+      ],
+      "final_training_loss": 0.584254568
+    },
+    "5": {
+      "new_rows": 600,
+      "training_rows": 12347,
+      "loss": [
+        0.571803147
+      ],
+      "final_training_loss": 0.571803147
+    },
+    "6": {
+      "new_rows": 600,
+      "training_rows": 11375,
+      "loss": [
+        0.560359034
+      ],
+      "final_training_loss": 0.560359034
+    },
+    "7": {
+      "new_rows": 600,
+      "training_rows": 10489,
+      "loss": [
+        0.548117583
+      ],
+      "final_training_loss": 0.548117583
+    },
+    "8": {
+      "new_rows": 600,
+      "training_rows": 9717,
+      "loss": [
+        0.518875564
+      ],
+      "final_training_loss": 0.518875564
+    },
+    "9": {
+      "new_rows": 600,
+      "training_rows": 9103,
+      "loss": [
+        0.54561029
+      ],
+      "final_training_loss": 0.54561029
+    },
+    "10": {
+      "new_rows": 600,
+      "training_rows": 8538,
+      "loss": [
+        0.535297469
+      ],
+      "final_training_loss": 0.535297469
+    }
+  }
+}

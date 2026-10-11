@@ -1,0 +1,63 @@
+{
+  "run": "small_m10",
+  "checkpoint": "m_10.npz",
+  "checkpoint_path": "checkpoints/m_10.npz",
+  "parameters": {
+    "num_states": 200,
+    "seed": 2026,
+    "grid_size": [
+      10,
+      10,
+      4
+    ],
+    "max_stones": 10
+  },
+  "elapsed_seconds_for_all_runs": 12.108658125999682,
+  "results": [
+    {
+      "run": "small_m10",
+      "group": "model_turn_7",
+      "model_team": 0,
+      "num_states": 100,
+      "average_model_score": -1.24,
+      "average_greedy_score": -1.72,
+      "average_advantage": 0.48,
+      "advantage_standard_error": 0.09690149116447586,
+      "advantage_ci95_low": 0.2900730773176273,
+      "advantage_ci95_high": 0.6699269226823726,
+      "win_rate": 0.41,
+      "tie_rate": 0.47,
+      "loss_rate": 0.12
+    },
+    {
+      "run": "small_m10",
+      "group": "model_turn_9",
+      "model_team": 0,
+      "num_states": 100,
+      "average_model_score": -1.14,
+      "average_greedy_score": -1.72,
+      "average_advantage": 0.58,
+      "advantage_standard_error": 0.07936617603859907,
+      "advantage_ci95_low": 0.4244422949643458,
+      "advantage_ci95_high": 0.7355577050356541,
+      "win_rate": 0.43,
+      "tie_rate": 0.55,
+      "loss_rate": 0.02
+    },
+    {
+      "run": "small_m10",
+      "group": "model_turn_8",
+      "model_team": 1,
+      "num_states": 100,
+      "average_model_score": 2.17,
+      "average_greedy_score": 1.65,
+      "average_advantage": 0.52,
+      "advantage_standard_error": 0.0758520622892704,
+      "advantage_ci95_low": 0.37132995791303003,
+      "advantage_ci95_high": 0.66867004208697,
+      "win_rate": 0.42,
+      "tie_rate": 0.55,
+      "loss_rate": 0.03
+    }
+  ]
+}

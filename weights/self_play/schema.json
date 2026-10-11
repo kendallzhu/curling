@@ -1,0 +1,113 @@
+{
+  "arrays": {
+    "b0": {
+      "dtype": "float64",
+      "shape": [
+        "hidden_layer_size",
+        1
+      ]
+    },
+    "b1": {
+      "dtype": "float64",
+      "shape": [
+        "hidden_layer_size",
+        1
+      ]
+    },
+    "b2": {
+      "dtype": "float64",
+      "shape": [
+        "hidden_layer_size",
+        1
+      ]
+    },
+    "b3": {
+      "dtype": "float64",
+      "shape": [
+        "2 * num_stones_per_side + 1",
+        1
+      ]
+    },
+    "feature_means": {
+      "dtype": "float64",
+      "meaning": "Input feature means.",
+      "shape": [
+        "1 + 6 * num_stones"
+      ]
+    },
+    "feature_stdevs": {
+      "dtype": "float64",
+      "meaning": "Input feature standard deviations.",
+      "shape": [
+        "1 + 6 * num_stones"
+      ]
+    },
+    "hidden_layer_size": {
+      "dtype": "int64",
+      "meaning": "Hidden layer width.",
+      "shape": []
+    },
+    "num_stones": {
+      "dtype": "int64",
+      "meaning": "Padded board width.",
+      "shape": []
+    },
+    "num_stones_per_side": {
+      "dtype": "int64",
+      "meaning": "Score range is +/- this value.",
+      "shape": []
+    },
+    "w0": {
+      "dtype": "float64",
+      "shape": [
+        "hidden_layer_size",
+        "1 + 6 * num_stones"
+      ]
+    },
+    "w1": {
+      "dtype": "float64",
+      "shape": [
+        "hidden_layer_size",
+        "hidden_layer_size"
+      ]
+    },
+    "w2": {
+      "dtype": "float64",
+      "shape": [
+        "hidden_layer_size",
+        "hidden_layer_size"
+      ]
+    },
+    "w3": {
+      "dtype": "float64",
+      "shape": [
+        "2 * num_stones_per_side + 1",
+        "hidden_layer_size"
+      ]
+    }
+  },
+  "category": "self_play",
+  "checkpoint_files": "checkpoints/m_<index>.npz; optional checkpoints/final_model.npz",
+  "input_vector": {
+    "shape": ["batch_size", "1 + 6 * num_stones"],
+    "representation": "Raw board features are concatenated in the segment order below, then normalized per column using feature_means and feature_stdevs saved in each checkpoint. If a standard deviation is zero, that feature is left unscaled.",
+    "padding_note": "The feature function determines thrown/not_thrown from the input SheetStates array width. If a caller pads SheetStates to num_stones before feature construction (as self-play does), every column is marked thrown and zero coordinates are processed as coordinates.",
+    "segments": [
+      {"name": "first_team", "shape": ["batch_size", 1], "meaning": "Team ID (0 or 1) assigned to the first stone slot; subsequent stone-slot teams alternate."},
+      {"name": "not_thrown", "shape": ["batch_size", "num_stones"], "meaning": "1 for a column added by the feature function when extending a narrower SheetStates array to num_stones; otherwise 0."},
+      {"name": "thrown", "shape": ["batch_size", "num_stones"], "meaning": "1 for each column already present in the input SheetStates array; otherwise 0. This reflects array width, not whether a stone remains in play."},
+      {"name": "x", "shape": ["batch_size", "num_stones"], "meaning": "Stone-slot x coordinates in metres. Columns added by the feature function are 0; upstream padding remains a 0 coordinate."},
+      {"name": "y", "shape": ["batch_size", "num_stones"], "meaning": "Stone-slot y coordinates in metres. Columns added by the feature function are 0; upstream padding remains a 0 coordinate."},
+      {"name": "distance_from_house_center", "shape": ["batch_size", "num_stones"], "meaning": "Radial distance from the house center in metres. It is 0 for columns added by the feature function; upstream zero coordinates also have distance 0."},
+      {"name": "in_house", "shape": ["batch_size", "num_stones"], "meaning": "1 when the column's distance is less than house_outer_circle_radius + stone_radius, otherwise 0. Columns added by the feature function are 0; an upstream zero-coordinate column is evaluated at the house center and is 1."}
+    ]
+  },
+  "output_vector": {
+    "shape": ["batch_size", "2 * num_stones_per_side + 1"],
+    "representation": "Unnormalized class logits. Applying softmax gives the predicted probability for each final net score from the first team's perspective.",
+    "class_index_to_net_score": "column j represents net score j - num_stones_per_side, for j from 0 through 2 * num_stones_per_side. Positive scores favor the first team; negative scores favor the other team.",
+    "training_target": "One-hot vector for the observed final net score."
+  },
+  "description": "Model checkpoints only. Training datasets and physics caches are stored outside weights/. Each checkpoint is a NumPy NPZ archive.",
+  "schema_version": 1
+}

@@ -37,5 +37,9 @@ _repo_root = os.path.dirname(os.path.abspath(__file__))
 weights_dir = os.path.join(_repo_root, "weights")
 datasets_dir = os.path.join(_repo_root, "datasets")
 
-value_network_weights_path = os.path.join(weights_dir, "value_network_weights.npz")
+# The current demo uses this archived value-network checkpoint. New training
+# runs save versioned checkpoints by category.
+value_network_weights_path = os.path.join(
+    weights_dir, "old", "value_network_weights", "value_network_weights.npz"
+)
 value_network_datasets_dir = os.path.join(datasets_dir, "value_network")

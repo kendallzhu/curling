@@ -1,0 +1,87 @@
+{
+  "category": "self_play",
+  "checkpoints": {
+    "1": {
+      "cross_entropy": 0.6070193544355926,
+      "epoch_metrics": [],
+      "metric_source": "recomputed_saved_checkpoint_on_X_i",
+      "mse": 0.3242158196107952,
+      "r_squared": 0.6925581211960573,
+      "training_rows": 18074
+    },
+    "10": {
+      "cross_entropy": 0.5352974693731257,
+      "epoch_metrics": [],
+      "metric_source": "recomputed_saved_checkpoint_on_X_i",
+      "mse": 0.26802482523544735,
+      "r_squared": 0.7075370134257738,
+      "training_rows": 8538
+    },
+    "2": {
+      "cross_entropy": 0.5800146355317409,
+      "epoch_metrics": [],
+      "metric_source": "recomputed_saved_checkpoint_on_X_i",
+      "mse": 0.30973447455120345,
+      "r_squared": 0.7083456513393155,
+      "training_rows": 16334
+    },
+    "3": {
+      "cross_entropy": 0.5746477503143916,
+      "epoch_metrics": [],
+      "metric_source": "recomputed_saved_checkpoint_on_X_i",
+      "mse": 0.3039138522330546,
+      "r_squared": 0.7054582210891425,
+      "training_rows": 14809
+    },
+    "4": {
+      "cross_entropy": 0.584254568120854,
+      "epoch_metrics": [],
+      "metric_source": "recomputed_saved_checkpoint_on_X_i",
+      "mse": 0.3078196025775062,
+      "r_squared": 0.700246743590587,
+      "training_rows": 13516
+    },
+    "5": {
+      "cross_entropy": 0.5718031470285616,
+      "epoch_metrics": [],
+      "metric_source": "recomputed_saved_checkpoint_on_X_i",
+      "mse": 0.297984947164752,
+      "r_squared": 0.7013373175429638,
+      "training_rows": 12347
+    },
+    "6": {
+      "cross_entropy": 0.560359034236032,
+      "epoch_metrics": [],
+      "metric_source": "recomputed_saved_checkpoint_on_X_i",
+      "mse": 0.28659490864935633,
+      "r_squared": 0.7087619591969171,
+      "training_rows": 11375
+    },
+    "7": {
+      "cross_entropy": 0.5481175829093456,
+      "epoch_metrics": [],
+      "metric_source": "recomputed_saved_checkpoint_on_X_i",
+      "mse": 0.2759506259890743,
+      "r_squared": 0.7152962367061119,
+      "training_rows": 10489
+    },
+    "8": {
+      "cross_entropy": 0.5188755636866815,
+      "epoch_metrics": [],
+      "metric_source": "recomputed_saved_checkpoint_on_X_i",
+      "mse": 0.26412223261427314,
+      "r_squared": 0.7272855160340268,
+      "training_rows": 9717
+    },
+    "9": {
+      "cross_entropy": 0.5456102900919816,
+      "epoch_metrics": [],
+      "metric_source": "recomputed_saved_checkpoint_on_X_i",
+      "mse": 0.2812030518388914,
+      "r_squared": 0.7058761264085094,
+      "training_rows": 9103
+    }
+  },
+  "metric_scope": "Training-set fit on retained X_i data; R-squared is for predicted expected score versus final score. Historical checkpoints were evaluated after training, so per-epoch metrics are unavailable.",
+  "run_name": "round9_2k_v2"
+}

@@ -1,0 +1,247 @@
+{
+  "category": "self_play",
+  "checkpoints": {
+    "1": {
+      "cross_entropy": 0.5814864693028534,
+      "epoch_metrics": [],
+      "metric_source": "recomputed_saved_checkpoint_on_X_i",
+      "mse": 0.30655333706858695,
+      "r_squared": 0.705701621221023,
+      "training_rows": 18939
+    },
+    "10": {
+      "cross_entropy": 0.5112843023173226,
+      "epoch_metrics": [],
+      "metric_source": "recomputed_saved_checkpoint_on_X_i",
+      "mse": 0.25412323905896184,
+      "r_squared": 0.6992303250214222,
+      "training_rows": 13687
+    },
+    "11": {
+      "cross_entropy": 0.4985658266006223,
+      "epoch_metrics": [],
+      "metric_source": "recomputed_saved_checkpoint_on_X_i",
+      "mse": 0.2390892410853547,
+      "r_squared": 0.7014916117663117,
+      "training_rows": 13419
+    },
+    "12": {
+      "cross_entropy": 0.43770487321618706,
+      "epoch_metrics": [],
+      "metric_source": "recomputed_saved_checkpoint_on_X_i",
+      "mse": 0.20927503644842071,
+      "r_squared": 0.7278769138516635,
+      "training_rows": 13215
+    },
+    "13": {
+      "cross_entropy": 0.5089056262821303,
+      "epoch_metrics": [],
+      "metric_source": "recomputed_saved_checkpoint_on_X_i",
+      "mse": 0.27558543066577745,
+      "r_squared": 0.7192786363356595,
+      "training_rows": 12999
+    },
+    "14": {
+      "cross_entropy": 0.5703044628303825,
+      "epoch_metrics": [],
+      "metric_source": "recomputed_saved_checkpoint_on_X_i",
+      "mse": 0.32178398941585834,
+      "r_squared": 0.6711586720775278,
+      "training_rows": 12924
+    },
+    "15": {
+      "cross_entropy": 0.5570660927772038,
+      "epoch_metrics": [],
+      "metric_source": "recomputed_saved_checkpoint_on_X_i",
+      "mse": 0.29856595514788725,
+      "r_squared": 0.6742893793001971,
+      "training_rows": 12762
+    },
+    "16": {
+      "cross_entropy": 0.5303983952096895,
+      "epoch_metrics": [],
+      "metric_source": "recomputed_saved_checkpoint_on_X_i",
+      "mse": 0.2737229687644496,
+      "r_squared": 0.6789027156770925,
+      "training_rows": 12593
+    },
+    "17": {
+      "cross_entropy": 0.5236948141829764,
+      "epoch_metrics": [],
+      "metric_source": "recomputed_saved_checkpoint_on_X_i",
+      "mse": 0.26146581393816937,
+      "r_squared": 0.6747010076919591,
+      "training_rows": 12592
+    },
+    "18": {
+      "cross_entropy": 0.5539712987309423,
+      "epoch_metrics": [],
+      "metric_source": "recomputed_saved_checkpoint_on_X_i",
+      "mse": 0.2755255677560951,
+      "r_squared": 0.6417229628048382,
+      "training_rows": 12518
+    },
+    "19": {
+      "cross_entropy": 0.5831432977668279,
+      "epoch_metrics": [],
+      "metric_source": "recomputed_saved_checkpoint_on_X_i",
+      "mse": 0.29050827046858363,
+      "r_squared": 0.6175041495000506,
+      "training_rows": 12419
+    },
+    "2": {
+      "cross_entropy": 0.5207986290517325,
+      "epoch_metrics": [],
+      "metric_source": "recomputed_saved_checkpoint_on_X_i",
+      "mse": 0.2715491116369968,
+      "r_squared": 0.7448150561194564,
+      "training_rows": 17994
+    },
+    "20": {
+      "cross_entropy": 0.5630568361073114,
+      "epoch_metrics": [],
+      "metric_source": "recomputed_saved_checkpoint_on_X_i",
+      "mse": 0.2752050135990523,
+      "r_squared": 0.6158635453098792,
+      "training_rows": 12278
+    },
+    "21": {
+      "cross_entropy": 0.4860746585036637,
+      "epoch_metrics": [],
+      "metric_source": "recomputed_saved_checkpoint_on_X_i",
+      "mse": 0.23420376613331523,
+      "r_squared": 0.6457579787286598,
+      "training_rows": 12183
+    },
+    "22": {
+      "cross_entropy": 0.5213092179658354,
+      "epoch_metrics": [],
+      "metric_source": "recomputed_saved_checkpoint_on_X_i",
+      "mse": 0.24738909637205558,
+      "r_squared": 0.6217542019552189,
+      "training_rows": 12128
+    },
+    "23": {
+      "cross_entropy": 0.5187996222238744,
+      "epoch_metrics": [],
+      "metric_source": "recomputed_saved_checkpoint_on_X_i",
+      "mse": 0.24425477763198025,
+      "r_squared": 0.6070893276943263,
+      "training_rows": 12074
+    },
+    "24": {
+      "cross_entropy": 0.5532309938359077,
+      "epoch_metrics": [],
+      "metric_source": "recomputed_saved_checkpoint_on_X_i",
+      "mse": 0.26105630766367777,
+      "r_squared": 0.5718162978213662,
+      "training_rows": 12019
+    },
+    "25": {
+      "cross_entropy": 0.5671458164796969,
+      "epoch_metrics": [],
+      "metric_source": "recomputed_saved_checkpoint_on_X_i",
+      "mse": 0.2639191843255656,
+      "r_squared": 0.558925584560785,
+      "training_rows": 11940
+    },
+    "26": {
+      "cross_entropy": 0.6118201208144526,
+      "epoch_metrics": [],
+      "metric_source": "recomputed_saved_checkpoint_on_X_i",
+      "mse": 0.2974000448848624,
+      "r_squared": 0.5237660035570229,
+      "training_rows": 11929
+    },
+    "27": {
+      "cross_entropy": 0.5224090981082151,
+      "epoch_metrics": [],
+      "metric_source": "recomputed_saved_checkpoint_on_X_i",
+      "mse": 0.25056529145472384,
+      "r_squared": 0.5693847165358825,
+      "training_rows": 11849
+    },
+    "28": {
+      "cross_entropy": 0.5994668348698542,
+      "epoch_metrics": [],
+      "metric_source": "recomputed_saved_checkpoint_on_X_i",
+      "mse": 0.31338327304310626,
+      "r_squared": 0.5663451731522672,
+      "training_rows": 11814
+    },
+    "29": {
+      "cross_entropy": 0.5910784263876285,
+      "epoch_metrics": [],
+      "metric_source": "recomputed_saved_checkpoint_on_X_i",
+      "mse": 0.2926646154038034,
+      "r_squared": 0.5708967298947013,
+      "training_rows": 11809
+    },
+    "3": {
+      "cross_entropy": 0.5178852256332904,
+      "epoch_metrics": [],
+      "metric_source": "recomputed_saved_checkpoint_on_X_i",
+      "mse": 0.26311305641675153,
+      "r_squared": 0.7382725515654434,
+      "training_rows": 17091
+    },
+    "30": {
+      "cross_entropy": 0.6122363134696406,
+      "epoch_metrics": [],
+      "metric_source": "recomputed_saved_checkpoint_on_X_i",
+      "mse": 0.2973529391364192,
+      "r_squared": 0.5825989925273476,
+      "training_rows": 11748
+    },
+    "4": {
+      "cross_entropy": 0.5583353265666702,
+      "epoch_metrics": [],
+      "metric_source": "recomputed_saved_checkpoint_on_X_i",
+      "mse": 0.2943934821019491,
+      "r_squared": 0.7108748044036959,
+      "training_rows": 16353
+    },
+    "5": {
+      "cross_entropy": 0.5543215810702677,
+      "epoch_metrics": [],
+      "metric_source": "recomputed_saved_checkpoint_on_X_i",
+      "mse": 0.2820285089434026,
+      "r_squared": 0.7117691289258543,
+      "training_rows": 15762
+    },
+    "6": {
+      "cross_entropy": 0.5478280897163202,
+      "epoch_metrics": [],
+      "metric_source": "recomputed_saved_checkpoint_on_X_i",
+      "mse": 0.2745974984217881,
+      "r_squared": 0.7083743819311852,
+      "training_rows": 15209
+    },
+    "7": {
+      "cross_entropy": 0.5161297628210813,
+      "epoch_metrics": [],
+      "metric_source": "recomputed_saved_checkpoint_on_X_i",
+      "mse": 0.2514487863309107,
+      "r_squared": 0.7263032134012856,
+      "training_rows": 14673
+    },
+    "8": {
+      "cross_entropy": 0.45593144678824277,
+      "epoch_metrics": [],
+      "metric_source": "recomputed_saved_checkpoint_on_X_i",
+      "mse": 0.2197507408809022,
+      "r_squared": 0.7542821099398294,
+      "training_rows": 14262
+    },
+    "9": {
+      "cross_entropy": 0.5259429830662579,
+      "epoch_metrics": [],
+      "metric_source": "recomputed_saved_checkpoint_on_X_i",
+      "mse": 0.273437255293664,
+      "r_squared": 0.7013817801402636,
+      "training_rows": 13894
+    }
+  },
+  "metric_scope": "Training-set fit on retained X_i data; R-squared is for predicted expected score versus final score. Historical checkpoints were evaluated after training, so per-epoch metrics are unavailable.",
+  "run_name": "round9_20k"
+}

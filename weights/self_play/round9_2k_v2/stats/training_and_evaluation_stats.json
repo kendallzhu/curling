@@ -1,0 +1,251 @@
+{
+  "model": {
+    "name": "self_play_N5_round9_2k_v2",
+    "checkpoint": "m_10.npz",
+    "source_checkpoint": "weights/self_play/round9_2k_v2/m_10.npz",
+    "architecture": {
+      "max_stones": 10,
+      "hidden_layer_size": 20,
+      "num_stones_per_side": 5
+    },
+    "checkpoint_contains_feature_normalizer": true
+  },
+  "training": {
+    "initial_checkpoint": "weights/sequential_training/round9_20k/m_9.npz",
+    "initial_dataset": "curling_data/N5_rows20000_stages2/sequential_experiment/D_9.npz (external experiment artifact)",
+    "seed": 0,
+    "iterations": 10,
+    "states_per_iteration": 200,
+    "new_rows_per_iteration": 600,
+    "training_iterations_per_checkpoint": 10,
+    "batch_size": 100,
+    "learning_rate": 0.5,
+    "retention_halflife_iterations": 5.0,
+    "retention_probability_per_row_per_iteration": 0.8705505633,
+    "grid_size": [
+      10,
+      10,
+      4
+    ],
+    "robust_top_fraction": 0.05,
+    "perturbation_angle_offsets_deg": [
+      0.0,
+      -0.2,
+      0.2
+    ],
+    "perturbation_probabilities": [
+      0.5,
+      0.25,
+      0.25
+    ],
+    "loss_definition": "Mean softmax cross-entropy on X_i after training iteration i; reconstructed from each saved m_i.npz and X_i.npz.",
+    "checkpoint_normalizers_match_rebuilt_X_i_normalizers": true,
+    "iterations_summary": [
+      {
+        "iteration": 1,
+        "new_rows": 600,
+        "training_rows": 18074,
+        "training_loss": 0.607019354
+      },
+      {
+        "iteration": 2,
+        "new_rows": 600,
+        "training_rows": 16334,
+        "training_loss": 0.580014636
+      },
+      {
+        "iteration": 3,
+        "new_rows": 600,
+        "training_rows": 14809,
+        "training_loss": 0.57464775
+      },
+      {
+        "iteration": 4,
+        "new_rows": 600,
+        "training_rows": 13516,
+        "training_loss": 0.584254568
+      },
+      {
+        "iteration": 5,
+        "new_rows": 600,
+        "training_rows": 12347,
+        "training_loss": 0.571803147
+      },
+      {
+        "iteration": 6,
+        "new_rows": 600,
+        "training_rows": 11375,
+        "training_loss": 0.560359034
+      },
+      {
+        "iteration": 7,
+        "new_rows": 600,
+        "training_rows": 10489,
+        "training_loss": 0.548117583
+      },
+      {
+        "iteration": 8,
+        "new_rows": 600,
+        "training_rows": 9717,
+        "training_loss": 0.518875564
+      },
+      {
+        "iteration": 9,
+        "new_rows": 600,
+        "training_rows": 9103,
+        "training_loss": 0.54561029
+      },
+      {
+        "iteration": 10,
+        "new_rows": 600,
+        "training_rows": 8538,
+        "training_loss": 0.535297469
+      }
+    ]
+  },
+  "evaluation": {
+    "seed": 2026,
+    "num_initial_states": 200,
+    "states_per_turn_group": 100,
+    "initial_state_after_throw_count": 6,
+    "grid_size": [
+      10,
+      10,
+      4
+    ],
+    "runtime_seconds": 27.2,
+    "method": "Compare each checkpoint with all-greedy play on the same initial states. The model controls only the target turn; greedy grid search controls the other turns.",
+    "score_perspective": "Final net score from the model team's perspective; positive advantage means model minus greedy is greater than zero.",
+    "confidence_interval": "Approximate 95% interval: paired mean advantage plus or minus 1.96 paired standard errors.",
+    "groups": {
+      "model_turn_7": {
+        "model_team": 0,
+        "states": "first 100 evaluation states"
+      },
+      "model_turn_9": {
+        "model_team": 0,
+        "states": "first 100 evaluation states"
+      },
+      "model_turn_8": {
+        "model_team": 1,
+        "states": "last 100 evaluation states"
+      }
+    },
+    "checkpoint_results": [
+      {
+        "run": "large_m30",
+        "checkpoint": "weights/self_play/round9_20k/m_30.npz",
+        "group": "model_turn_7",
+        "num_states": 100,
+        "average_model_score": -1.32,
+        "average_greedy_score": -1.72,
+        "average_advantage": 0.4,
+        "advantage_standard_error": 0.102,
+        "advantage_ci95": [
+          0.199,
+          0.601
+        ],
+        "win_tie_loss_rate": [
+          0.39,
+          0.43,
+          0.18
+        ]
+      },
+      {
+        "run": "large_m30",
+        "checkpoint": "weights/self_play/round9_20k/m_30.npz",
+        "group": "model_turn_9",
+        "num_states": 100,
+        "average_model_score": -1.27,
+        "average_greedy_score": -1.72,
+        "average_advantage": 0.45,
+        "advantage_standard_error": 0.095,
+        "advantage_ci95": [
+          0.264,
+          0.636
+        ],
+        "win_tie_loss_rate": [
+          0.42,
+          0.45,
+          0.13
+        ]
+      },
+      {
+        "run": "large_m30",
+        "checkpoint": "weights/self_play/round9_20k/m_30.npz",
+        "group": "model_turn_8",
+        "num_states": 100,
+        "average_model_score": 1.57,
+        "average_greedy_score": 1.65,
+        "average_advantage": -0.08,
+        "advantage_standard_error": 0.106,
+        "advantage_ci95": [
+          -0.288,
+          0.128
+        ],
+        "win_tie_loss_rate": [
+          0.21,
+          0.57,
+          0.22
+        ]
+      },
+      {
+        "run": "small_m10",
+        "checkpoint": "weights/self_play/round9_2k_v2/m_10.npz",
+        "group": "model_turn_7",
+        "num_states": 100,
+        "average_model_score": -1.24,
+        "average_greedy_score": -1.72,
+        "average_advantage": 0.48,
+        "advantage_standard_error": 0.097,
+        "advantage_ci95": [
+          0.29,
+          0.67
+        ],
+        "win_tie_loss_rate": [
+          0.41,
+          0.47,
+          0.12
+        ]
+      },
+      {
+        "run": "small_m10",
+        "checkpoint": "weights/self_play/round9_2k_v2/m_10.npz",
+        "group": "model_turn_9",
+        "num_states": 100,
+        "average_model_score": -1.14,
+        "average_greedy_score": -1.72,
+        "average_advantage": 0.58,
+        "advantage_standard_error": 0.079,
+        "advantage_ci95": [
+          0.424,
+          0.736
+        ],
+        "win_tie_loss_rate": [
+          0.43,
+          0.55,
+          0.02
+        ]
+      },
+      {
+        "run": "small_m10",
+        "checkpoint": "weights/self_play/round9_2k_v2/m_10.npz",
+        "group": "model_turn_8",
+        "num_states": 100,
+        "average_model_score": 2.17,
+        "average_greedy_score": 1.65,
+        "average_advantage": 0.52,
+        "advantage_standard_error": 0.076,
+        "advantage_ci95": [
+          0.371,
+          0.669
+        ],
+        "win_tie_loss_rate": [
+          0.42,
+          0.55,
+          0.03
+        ]
+      }
+    ]
+  }
+}

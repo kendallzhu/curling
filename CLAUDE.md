@@ -45,8 +45,11 @@ Vectorized curling simulation with Numba physics, actual scoring, grid-search an
   - `load_v_weights` and `write_v_weights` handle model weights plus the feature normalizer.
 - `dataset.py` – `Normalizer`, `TrainingData`, batching, partitioning, the spiral example dataset, and shard IO (`write_training_data_shard` / `load_training_data_dir`).
 - `training.ipynb` – Legacy notebook; its Q workflow and pre-self-play value features are no longer supported.
-- `weights/` – Checked-in value-network weights and normalizers. Existing weights must use the padded self-play feature format.
-- `datasets/` – Value-network shards. Loading concatenates `raw_inputs` and refits the normalizer.
+- `sequential_training.py` – Reusable sequential score-model training, evaluation, and checkpoint IO.
+- `self_play_training.py` – Reusable self-play rollout and training code, driven with the initial sequential stage by `self_play_training.ipynb`.
+- `self_play_evaluation.ipynb` – Plots committed self-play training metrics and runs a quick paired comparison of selected checkpoints against greedy play; outputs go under each run's `stats/` directory.
+- `weights/` – Saved model checkpoints. New sequential-training and self-play checkpoints live in `weights/<category>/<run>/checkpoints/`, with run records in `stats/`; each category has a `schema.json` describing every NPZ array. Archived legacy weights are kept under `weights/old/`.
+- `datasets/` – Checked-in value-network shards. Loading concatenates `raw_inputs` and refits the normalizer.
 - `scratch/nn_scratch_old.ipynb` – Older neural-network scratch notebook.
 
 ### Demo and UI

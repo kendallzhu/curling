@@ -1,0 +1,12 @@
+{
+  "N": 5,
+  "category": "sequential_training",
+  "max_stones": 10,
+  "rows_per_model": 20000,
+  "run_name": "round9_20k",
+  "saved_checkpoints": [
+    8,
+    9
+  ],
+  "source_artifacts": "curling_data/N5_rows20000_stages2/sequential_experiment"
+}

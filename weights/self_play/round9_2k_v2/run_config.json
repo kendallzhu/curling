@@ -1,0 +1,173 @@
+{
+  "category": "self_play",
+  "config": {
+    "batch_size": 100,
+    "grid_size": [
+      10,
+      10,
+      4
+    ],
+    "halflife": 5.0,
+    "hidden_layer_size": 20,
+    "learning_rate": 0.5,
+    "max_stones": 10,
+    "num_iterations": 10,
+    "num_states": 200,
+    "num_stones_per_side": 5,
+    "perturbations": {
+      "angle_offsets_deg": [
+        0.0,
+        -0.2,
+        0.2
+      ],
+      "probabilities": [
+        0.5,
+        0.25,
+        0.25
+      ]
+    },
+    "robust_top_fraction": 0.05,
+    "state_generator_version": "turn_based",
+    "training_iterations": 10,
+    "validation_fraction": 0.0
+  },
+  "initial_dataset": "external:D_9.npz",
+  "initial_model": "weights/sequential_training/round9_20k/checkpoints/m_9.npz",
+  "network_training": {
+    "batch_size": 100,
+    "hidden_layer_size": 20,
+    "iterations_per_checkpoint": 10,
+    "learning_rate": 0.5,
+    "learning_rate_schedule": "learning_rate * 0.5 * (1 + cos(pi * iteration / iterations_per_checkpoint))",
+    "loss": "softmax cross-entropy",
+    "normalizer": "refit from the combined training data for each checkpoint",
+    "optimizer": "mini-batch gradient descent",
+    "regularization": 0.0,
+    "seed": "run seed + checkpoint index; batch shuffle uses seed + epoch"
+  },
+  "notebook_parameters": {
+    "N": 5,
+    "artifacts": {
+      "data_root": "curling_data",
+      "diagnostic_output_dir": null,
+      "initial_dataset": "N5_rows20000_stages2/sequential_experiment/D_9.npz",
+      "initial_model": "weights/sequential_training/round9_20k/checkpoints/m_9.npz",
+      "self_play_artifact_dir": "self_play_N5_round9_2k_v2",
+      "self_play_weights_dir": "weights/self_play/round9_2k_v2",
+      "sequential_artifact_dir": "N5_rows20000_stages2/sequential_experiment",
+      "sequential_weights_dir": "weights/sequential_training/round9_20k"
+    },
+    "initial_sequential_training": {
+      "grid_size": [
+        10,
+        10,
+        4
+      ],
+      "network_training": {
+        "batch_shuffle_seed": "model index + iteration",
+        "batch_size": 100,
+        "hidden_layer_size": 20,
+        "learning_rate_schedule": "0.5 * (1 + cos(pi * iteration / num_training_iterations))",
+        "loss": "softmax cross-entropy",
+        "optimizer": "mini-batch gradient descent",
+        "regularization": 0.0,
+        "validation_fraction": 0.2
+      },
+      "num_training_iterations": 30,
+      "perturbations": {
+        "angle_offsets_deg": [
+          0.0,
+          -0.2,
+          0.2
+        ],
+        "probabilities": [
+          0.5,
+          0.25,
+          0.25
+        ]
+      },
+      "policy_comparison_num_sims": 5,
+      "random_throw_count": 432,
+      "resume_from": null,
+      "robust_top_fraction": 0.05,
+      "rows_per_model": 20000,
+      "run_name": "round9_20k",
+      "state_generator_version": "turn_based",
+      "training_data_generation": {
+        "method": "Sample second-to-last-turn boards, select the final throw, and label each board with the resulting team-0 net score.",
+        "rows_per_model": 20000
+      },
+      "training_stages": 1,
+      "turn": 9
+    },
+    "seed": 0,
+    "self_play": {
+      "batch_size": 100,
+      "grid_size": [
+        10,
+        10,
+        4
+      ],
+      "halflife": 5.0,
+      "hidden_layer_size": 20,
+      "learning_rate": 0.5,
+      "num_iterations": 10,
+      "num_states": 200,
+      "perturbations": {
+        "angle_offsets_deg": [
+          0.0,
+          -0.2,
+          0.2
+        ],
+        "probabilities": [
+          0.5,
+          0.25,
+          0.25
+        ]
+      },
+      "resume_from": null,
+      "robust_top_fraction": 0.05,
+      "run_name": "round9_2k_v2",
+      "state_generator_version": "turn_based",
+      "training_iterations": 10,
+      "validation_fraction": 0.0
+    }
+  },
+  "run_config_version": 2,
+  "run_name": "round9_2k_v2",
+  "seed": 0,
+  "training_data_generation": {
+    "final_turn_policy": "actual-score throw selection",
+    "label": "Final net score for team 0, copied to states at turns 7, 8, and 9.",
+    "labeled_states_per_start_state": 3,
+    "model_controlled_turns": [
+      8,
+      9
+    ],
+    "new_rows_per_iteration": 600,
+    "retained_previous_row_probability": 0.8705505632961241,
+    "sampled_start_states_per_iteration": 200,
+    "sampled_start_turn": 7,
+    "state_generator_version": "turn_based",
+    "throw_search": {
+      "grid_size": [
+        10,
+        10,
+        4
+      ],
+      "perturbations": {
+        "angle_offsets_deg": [
+          0.0,
+          -0.2,
+          0.2
+        ],
+        "probabilities": [
+          0.5,
+          0.25,
+          0.25
+        ]
+      },
+      "robust_top_fraction": 0.05
+    }
+  }
+}
