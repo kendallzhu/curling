@@ -188,15 +188,28 @@ def _tile_throws_and_states(
 
 
 class ThrowsGridSearcher(ThrowSearcher):
-    def __init__(self, num_angles: int, num_speeds: int, num_y_vals: int):
+    def __init__(
+        self,
+        num_angles: int,
+        num_speeds: int,
+        num_y_vals: int,
+        rng: np.random.Generator | None = None,
+    ):
         self.num_angles = num_angles
         self.num_speeds = num_speeds
         self.num_y_vals = num_y_vals
+        self.rng = rng if rng is not None else np.random.default_rng()
+
+    def _shifted_linspace(self, low: float, high: float, num: int) -> np.ndarray:
+        # Random shift in [0, grid width) per dimension; clipped to stay in bounds.
+        step = (high - low) / (num - 1) if num > 1 else 0.0
+        offset = self.rng.uniform(0.0, step) if step > 0 else 0.0
+        return np.minimum(np.linspace(low, high, num) + offset, high)
 
     def get_throws(self, team: int):
-        angle_options = np.linspace(min_release_angle, max_release_angle, self.num_angles)
-        speed_options = np.linspace(min_release_speed, max_release_speed, self.num_speeds)
-        y_options = np.linspace(min_release_y, max_release_y, self.num_y_vals)
+        angle_options = self._shifted_linspace(min_release_angle, max_release_angle, self.num_angles)
+        speed_options = self._shifted_linspace(min_release_speed, max_release_speed, self.num_speeds)
+        y_options = self._shifted_linspace(min_release_y, max_release_y, self.num_y_vals)
 
         angles, speeds, turns, ys = np.meshgrid(
             angle_options, speed_options, turn_options, y_options, indexing='ij'

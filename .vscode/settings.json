@@ -117,7 +117,8 @@
             "matchCommandLine": true
         },
         "/home/kzhu/curling/venv/bin/python": true,
-        "git -c core.whitespace=cr-at-eol": true
+        "git -c core.whitespace=cr-at-eol": true,
+        "venv/bin/python": true
     },
     "python.testing.pytestArgs": [
         "tests"
