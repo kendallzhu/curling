@@ -29,6 +29,7 @@ class SelfPlayConfig:
     num_iterations: int = 30
     grid_size: tuple[int, int, int] = (10, 10, 4)
     state_generator_version: str = "turn_based"
+    start_turn: int = 7
     halflife: float = 5.0
     max_stones: int = 10
     num_stones_per_side: int = 5
@@ -129,45 +130,58 @@ def generate_self_play_batch(
     config: SelfPlayConfig,
     rng: np.random.Generator,
 ) -> tuple[seq.SequentialDataset, state.SheetStates]:
-    """Generate D_i: three labelled states for each random s_7."""
+    """Generate labeled states from a sampled turn through the penultimate turn."""
     if config.state_generator_version != "turn_based":
         raise ValueError("self-play currently requires state_generator_version='turn_based'")
+    if not 0 <= config.start_turn < config.max_stones:
+        raise ValueError(
+            f"start_turn must be in [0, {config.max_stones - 1}], got {config.start_turn}"
+        )
     generator = seq.data_generation.generate_random_sheet_state_for_turn
-    s7 = generator(turn=7, num_sims=config.num_states, rng=rng)
+    current = generator(
+        turn=config.start_turn, num_sims=config.num_states, rng=rng
+    )
+    training_states = [current]
     searcher = ThrowsGridSearcher(*config.grid_size)
 
     def model_utility(states):
         scores = _model_scores(model, normalizer, _pad_states(states, config.max_stones), config.max_stones)
         return scores if team == 0 else -scores
 
-    team = int(s7.next_team_to_play()[0])
-    s8_throw = _choose_throw(
-        s7, team, searcher, model_utility, model_utility,
-        config.perturbations, config.robust_top_fraction,
-    )
-    s8 = seq.cached_physics.run_until_stopping(sheet_states=s7, throws=s8_throw)
+    for _ in range(config.start_turn + 1, config.max_stones):
+        team = int(current.next_team_to_play()[0])
+        model_throw = _choose_throw(
+            current, team, searcher, model_utility, model_utility,
+            config.perturbations, config.robust_top_fraction,
+        )
+        current = seq.cached_physics.run_until_stopping(
+            sheet_states=current, throws=model_throw
+        )
+        training_states.append(current)
 
-    team = int(s8.next_team_to_play()[0])
-    s9_throw = _choose_throw(
-        s8, team, searcher, model_utility, model_utility,
-        config.perturbations, config.robust_top_fraction,
-    )
-    s9 = seq.cached_physics.run_until_stopping(sheet_states=s8, throws=s9_throw)
-
-    team = int(s9.next_team_to_play()[0])
+    team = int(current.next_team_to_play()[0])
     def actual_utility(states):
         return scoring.get_net_score_for_team(states, team)
 
-    s10_throw = _choose_throw(
-        s9, team, searcher, actual_utility, actual_utility,
+    final_throw = _choose_throw(
+        current, team, searcher, actual_utility, actual_utility,
         config.perturbations, config.robust_top_fraction,
     )
-    s10 = seq.cached_physics.run_until_stopping(sheet_states=s9, throws=s10_throw)
-    final_scores = scoring.get_net_score_for_team(s10, 0)
+    final_state = seq.cached_physics.run_until_stopping(
+        sheet_states=current, throws=final_throw
+    )
+    final_scores = scoring.get_net_score_for_team(final_state, 0)
 
-    rows = state.concat([_pad_states(s7, config.max_stones), _pad_states(s8, config.max_stones), _pad_states(s9, config.max_stones)])
-    labels = np.tile(final_scores, 3)
-    return seq.SequentialDataset(rows, labels, config.max_stones, config.num_stones_per_side), s10
+    rows = state.concat(
+        [_pad_states(states, config.max_stones) for states in training_states]
+    )
+    labels = np.tile(final_scores, len(training_states))
+    return (
+        seq.SequentialDataset(
+            rows, labels, config.max_stones, config.num_stones_per_side
+        ),
+        final_state,
+    )
 
 
 def retain_and_combine(
@@ -306,14 +320,21 @@ def run_self_play(
             "notebook_parameters": notebook_parameters,
             "training_data_generation": {
                 "state_generator_version": config.state_generator_version,
-                "sampled_start_turn": 7,
+                "sampled_start_turn": config.start_turn,
                 "sampled_start_states_per_iteration": config.num_states,
-                "model_controlled_turns": [8, 9],
+                "model_controlled_turns": list(
+                    range(config.start_turn + 1, config.max_stones)
+                ),
                 "final_turn_policy": "actual-score throw selection",
-                "labeled_states_per_start_state": 3,
-                "new_rows_per_iteration": 3 * config.num_states,
+                "labeled_states_per_start_state": (
+                    config.max_stones - config.start_turn
+                ),
+                "new_rows_per_iteration": (
+                    (config.max_stones - config.start_turn) * config.num_states
+                ),
                 "label": (
-                    "Final net score for team 0, copied to states at turns 7, 8, and 9."
+                    "Final net score for team 0, copied to states at turns "
+                    f"{config.start_turn} through {config.max_stones - 1}."
                 ),
                 "retained_previous_row_probability": config.retention_probability(),
                 "throw_search": {
@@ -534,7 +555,11 @@ def _rollout_policy_group(
     current = initial_states
     searcher = ThrowsGridSearcher(*grid_size)
     throw_history = [[] for _ in range(initial_states.x.shape[0])] if record_throws else None
-    for turn in range(7, 11):
+    # The supplied state contains all stones from earlier turns. This also
+    # lets parity evaluations start before turn 6 while preserving the existing
+    # turn-7-through-10 single-turn comparisons.
+    first_turn = initial_states.x.shape[1] + 1
+    for turn in range(first_turn, max_stones + 1):
         if turn in model_turns:
             throws = _greedy_model_throw(
                 current, model, normalizer, searcher, max_stones
@@ -558,12 +583,14 @@ def evaluate_checkpoints_against_greedy_with_games(
     grid_size: tuple[int, int, int] = (10, 10, 4),
     max_stones: int = 10,
     states: state.SheetStates | None = None,
+    parity_states: state.SheetStates | None = None,
 ) -> list[dict[str, object]]:
     """Return paired game states, throws, and scores for interactive replay.
 
-    The same seeded states and policy rollouts as
-    :func:`evaluate_checkpoints_against_greedy` are used. Each result contains
-    one 100-game group (or ``num_states // 2`` games for custom sizes).
+    Existing single-turn groups use states through turn 6, and the added
+    parity groups use states through turn 5 so they can include turns 6 and 7.
+    The same greedy policy controls turn 10 and all turns outside each
+    ``model_turns`` set. Each result contains ``num_states // 2`` games.
     """
     if not checkpoint_paths:
         raise ValueError("checkpoint_paths must not be empty")
@@ -575,20 +602,51 @@ def evaluate_checkpoints_against_greedy_with_games(
         )
     if states.x.shape[0] != num_states:
         raise ValueError("states must contain num_states rows")
+    if parity_states is None:
+        parity_states = seq.data_generation.generate_random_sheet_state_for_turn(
+            turn=5, num_sims=num_states, rng=np.random.default_rng(seed + 1)
+        )
+    if parity_states.x.shape[0] != num_states:
+        raise ValueError("parity_states must contain num_states rows")
+    if parity_states.x.shape[1] != 5:
+        raise ValueError("parity_states must represent boards through turn 5")
 
     midpoint = num_states // 2
     first_half = state.take_sheet_states(states, np.arange(midpoint))
     second_half = state.take_sheet_states(states, np.arange(midpoint, num_states))
+    parity_midpoint = num_states // 2
+    parity_first_half = state.take_sheet_states(
+        parity_states, np.arange(parity_midpoint)
+    )
+    parity_second_half = state.take_sheet_states(
+        parity_states, np.arange(parity_midpoint, num_states)
+    )
     groups = (
-        ("model_turn_7", frozenset((7,)), 0, first_half),
-        ("model_turn_9", frozenset((9,)), 0, first_half),
-        ("model_turn_8", frozenset((8,)), 1, second_half),
+        ("model_turn_7", frozenset((7,)), 0, first_half, "single_odd"),
+        ("model_turn_9", frozenset((9,)), 0, first_half, "single_odd"),
+        ("model_turn_8", frozenset((8,)), 1, second_half, "single_even"),
+        (
+            "model_turns_7_9",
+            frozenset((7, 9)),
+            0,
+            parity_first_half,
+            "parity_odd",
+        ),
+        (
+            "model_turns_6_8",
+            frozenset((6, 8)),
+            1,
+            parity_second_half,
+            "parity_even",
+        ),
     )
 
     greedy_results = {}
-    for group_name, model_team, group_states in (
-        ("model_turns_7_9", 0, first_half),
-        ("model_turn_8", 1, second_half),
+    for baseline_name, model_team, group_states in (
+        ("single_odd", 0, first_half),
+        ("single_even", 1, second_half),
+        ("parity_odd", 0, parity_first_half),
+        ("parity_even", 1, parity_second_half),
     ):
         scores, throws = _rollout_policy_group(
             group_states,
@@ -600,12 +658,12 @@ def evaluate_checkpoints_against_greedy_with_games(
             max_stones=max_stones,
             record_throws=True,
         )
-        greedy_results[group_name] = (scores, throws)
+        greedy_results[baseline_name] = (scores, throws)
 
     records: list[dict[str, object]] = []
     for run_name, checkpoint_path in checkpoint_paths.items():
         model, normalizer = seq.load_model(checkpoint_path)
-        for group_name, model_turns, model_team, group_states in groups:
+        for group_name, model_turns, model_team, group_states, baseline_name in groups:
             model_scores, model_throws = _rollout_policy_group(
                 group_states,
                 model,
@@ -616,7 +674,6 @@ def evaluate_checkpoints_against_greedy_with_games(
                 max_stones=max_stones,
                 record_throws=True,
             )
-            baseline_name = "model_turns_7_9" if model_team == 0 else "model_turn_8"
             greedy_scores, greedy_throws = greedy_results[baseline_name]
             records.append({
                 "run": run_name,

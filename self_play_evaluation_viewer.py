@@ -15,11 +15,15 @@ from state import add_new_stone
 from user_interface import render_sheet
 
 
-DEFAULT_EVALUATION_ARCHIVE = Path("stats/self_play_evaluation_games.npz")
+DEFAULT_EVALUATION_ARCHIVE = Path(
+    "weights/self_play/round9_2k_v4/stats/self_play_evaluation_games.npz"
+)
 GROUPS = (
     ("model_turn_7", "Model played turn 7", (7,)),
     ("model_turn_9", "Model played turn 9", (9,)),
     ("model_turn_8", "Model played turn 8", (8,)),
+    ("model_turns_7_9", "Model played turns 7, 9", (7, 9)),
+    ("model_turns_6_8", "Model played turns 6, 8", (6, 8)),
 )
 SIDEBAR_W = 430
 ROW_H = 24
@@ -54,8 +58,8 @@ def _button(surface, rect, label, font, *, active=False):
     surface.blit(font.render(label, True, TEXT), (rect.x + 9, rect.y + 7))
 
 
-def _selected_record(records, run_name, group_index):
-    group_name = GROUPS[group_index][0]
+def _selected_record(records, run_name, group_index, groups):
+    group_name = groups[group_index][0]
     return next(
         record
         for record in records
@@ -87,7 +91,13 @@ def _summary_stats(record):
     }
 
 
-def _run_viewer(records, *, run_names: tuple[str, ...], small_window: bool) -> None:
+def _run_viewer(
+    records,
+    *,
+    run_names: tuple[str, ...],
+    groups: tuple[tuple[str, str, tuple[int, ...]], ...],
+    small_window: bool,
+) -> None:
     pygame.init()
     window_w, window_h = (1400, 760) if small_window else (1880, 1000)
     screen = pygame.display.set_mode((window_w, window_h), pygame.RESIZABLE)
@@ -108,7 +118,9 @@ def _run_viewer(records, *, run_names: tuple[str, ...], small_window: bool) -> N
 
     def reset_game():
         nonlocal current, throw_index, playing
-        game = _selected_record(records, run_names[run_index], group_index)["games"][game_index]
+        game = _selected_record(
+            records, run_names[run_index], group_index, groups
+        )["games"][game_index]
         current = copy.deepcopy(game["initial_state"])
         throw_index = 0
         playing = False
@@ -128,7 +140,7 @@ def _run_viewer(records, *, run_names: tuple[str, ...], small_window: bool) -> N
         screen_w, screen_h = screen.get_size()
         sidebar_x = max(0, screen_w - SIDEBAR_W)
         sheet_surface = screen.subsurface(pygame.Rect(0, 0, sidebar_x, screen_h))
-        record = _selected_record(records, run_names[run_index], group_index)
+        record = _selected_record(records, run_names[run_index], group_index, groups)
         game = record["games"][game_index]
         replay_throws = game["greedy_throws"] if greedy_vs_greedy else game["model_throws"]
         model_score = game["model_score"]
@@ -182,13 +194,20 @@ def _run_viewer(records, *, run_names: tuple[str, ...], small_window: bool) -> N
                             run_index = (run_index - 1) % len(run_names)
                         else:
                             run_index = (run_index + 1) % len(run_names)
-                        game_index = min(game_index, len(_selected_record(records, run_names[run_index], group_index)["games"]) - 1)
+                        game_index = min(
+                            game_index,
+                            len(
+                                _selected_record(
+                                    records, run_names[run_index], group_index, groups
+                                )["games"]
+                            ) - 1,
+                        )
                         reset_game()
                     elif 78 <= my < 108:
                         if local_x < 202:
-                            group_index = (group_index - 1) % len(GROUPS)
+                            group_index = (group_index - 1) % len(groups)
                         else:
-                            group_index = (group_index + 1) % len(GROUPS)
+                            group_index = (group_index + 1) % len(groups)
                         game_index = 0
                         scroll_offset = 0
                         reset_game()
@@ -208,7 +227,7 @@ def _run_viewer(records, *, run_names: tuple[str, ...], small_window: bool) -> N
                             game_index = clicked_index
                             reset_game()
 
-        record = _selected_record(records, run_names[run_index], group_index)
+        record = _selected_record(records, run_names[run_index], group_index, groups)
         game = record["games"][game_index]
         replay_throws = game["greedy_throws"] if greedy_vs_greedy else game["model_throws"]
         model_score = game["model_score"]
@@ -313,8 +332,9 @@ def _run_viewer(records, *, run_names: tuple[str, ...], small_window: bool) -> N
         else:
             active_throw_index = max(0, len(replay_throws) - 1)
             throw_state_label = "Game complete"
-        active_turn = 7 + active_throw_index
         active_throw = replay_throws[active_throw_index]
+        first_turn = game["initial_state"].x.shape[1] + 1
+        active_turn = first_turn + active_throw_index
         team_name = "Red" if active_throw.team == 0 else "Yellow"
         model_turn = active_turn in record["model_turns"]
         model_is_doing_throw = model_turn and not greedy_vs_greedy
@@ -385,19 +405,27 @@ def main() -> None:
     if not records:
         raise ValueError(f"Evaluation archive contains no games: {args.evaluation_archive}")
     run_names = tuple(dict.fromkeys(record["run"] for record in records))
-    expected_groups = {group[0] for group in GROUPS}
-    for run_name in run_names:
-        available_groups = {
+    records_by_run = {
+        run_name: {
             record["group"] for record in records if record["run"] == run_name
         }
-        missing_groups = expected_groups - available_groups
-        if missing_groups:
-            raise ValueError(
-                f"Evaluation archive is missing groups for {run_name}: "
-                f"{', '.join(sorted(missing_groups))}"
-            )
+        for run_name in run_names
+    }
+    common_group_names = set.intersection(*records_by_run.values())
+    available_groups = tuple(
+        group for group in GROUPS if group[0] in common_group_names
+    )
+    if not available_groups:
+        raise ValueError(
+            f"Evaluation archive contains no supported policy groups: {args.evaluation_archive}"
+        )
     print(f"Ready to replay {sum(len(record['games']) for record in records)} games.")
-    _run_viewer(records, run_names=run_names, small_window=args.small_window)
+    _run_viewer(
+        records,
+        run_names=run_names,
+        groups=available_groups,
+        small_window=args.small_window,
+    )
 
 
 if __name__ == "__main__":
