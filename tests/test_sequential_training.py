@@ -119,6 +119,41 @@ def test_policy_summary_reports_paired_outcomes():
     assert summary["model_loss_probability"] == 0
 
 
+def test_policy_comparison_is_chunked(monkeypatch, tmp_path):
+    calls = []
+
+    def fake_compare(i, sheet_states, models, **kwargs):
+        calls.append(sheet_states.x.shape[0])
+        n = sheet_states.x.shape[0]
+        throws = _throws(n)
+        return sequential.PolicyComparison(
+            initial_states=sheet_states,
+            model_scores=np.ones(n),
+            greedy_scores=np.zeros(n),
+            model_throws=throws,
+            greedy_throws=throws,
+        )
+
+    monkeypatch.setattr(sequential, "compare_policies", fake_compare)
+    result = sequential.print_policy_comparison(
+        1,
+        artifact_dir=tmp_path,
+        models={},
+        random_sheet_states=lambda **kwargs: data_generation.random_sheet_states(
+            team1=1, team2=0, num_sims=kwargs["num_sims"], rng=kwargs["rng"]
+        ),
+        greedy_comparison_searcher=object(),
+        model_comparison_searcher=object(),
+        max_stones=2,
+        num_sims=7,
+        chunk_size=3,
+    )
+
+    assert calls == [3, 3, 1]
+    assert result.model_scores.size == 7
+    assert (tmp_path / "policy_comparison_1.npz").exists()
+
+
 def test_model_checkpoint_round_trip(tmp_path):
     model = sequential.make_model(seed=0, max_stones=4, num_stones_per_side=2)
     normalizer = sequential.dataset.Normalizer(
@@ -131,6 +166,20 @@ def test_model_checkpoint_round_trip(tmp_path):
         np.testing.assert_array_equal(expected.weights, actual.weights)
         np.testing.assert_array_equal(expected.bias, actual.bias)
     np.testing.assert_array_equal(loaded_normalizer.feature_means, normalizer.feature_means)
+
+
+def test_load_sequential_models_discovers_checkpoints(tmp_path):
+    for i in (8, 9):
+        model = sequential.make_model(seed=i, max_stones=10, num_stones_per_side=5)
+        normalizer = sequential.dataset.Normalizer(
+            np.zeros(sequential.feature_width(10)),
+            np.ones(sequential.feature_width(10)),
+        )
+        sequential.write_model(tmp_path / f"m_{i}.npz", model, normalizer)
+
+    models = sequential.load_sequential_models(tmp_path)
+
+    assert set(models) == {8, 9}
 
 
 def test_default_throw_searcher_combines_grid_and_random_candidates():

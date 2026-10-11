@@ -549,6 +549,23 @@ def load_model(path: str | Path):
     return model, normalizer
 
 
+def load_sequential_models(
+    artifact_dir: str | Path, model_indices: Any | None = None
+) -> dict[int, tuple[object, dataset.Normalizer]]:
+    """Load saved sequential model checkpoints from an experiment directory."""
+    artifact_dir = Path(artifact_dir)
+    if model_indices is None:
+        paths = sorted(artifact_dir.glob("m_*.npz"))
+        model_indices = [int(path.stem.removeprefix("m_")) for path in paths]
+    models = {}
+    for i in model_indices:
+        path = artifact_dir / f"m_{i}.npz"
+        if not path.exists():
+            raise FileNotFoundError(path)
+        models[int(i)] = load_model(path)
+    return models
+
+
 def policy_summary(comparison: PolicyComparison) -> dict[str, float]:
     """Compute aggregate metrics comparing the model and greedy policies.
 
@@ -839,28 +856,45 @@ def print_policy_comparison(
     perturbations: ThrowPerturbations = DEFAULT_THROW_PERTURBATIONS,
     seed: int = 0,
     robust_top_fraction: float = 0.05,
+    chunk_size: int = 100,
 ) -> PolicyComparison:
     """Compare and persist model and greedy policies for one model index."""
     if num_sims < 1:
         raise ValueError("num_sims must be positive")
+    if chunk_size < 1:
+        raise ValueError("chunk_size must be positive")
     comparison_seed = seed + i
-    states = random_sheet_states(
-        turn=i - 1, num_sims=num_sims, rng=np.random.default_rng(comparison_seed)
-    )
+    state_rng = np.random.default_rng(comparison_seed)
     for comparison_searcher in (greedy_comparison_searcher, model_comparison_searcher):
         if isinstance(comparison_searcher, GridAndRandomThrowSearcher):
             comparison_searcher.random_searcher.rng = np.random.default_rng(
                 comparison_seed
             )
-    comparison = compare_policies(
-        i,
-        states,
-        models,
-        max_stones=max_stones,
-        searcher=greedy_comparison_searcher,
-        model_searcher=model_comparison_searcher,
-        perturbations=perturbations,
-        robust_top_fraction=robust_top_fraction,
+
+    comparisons = []
+    for start in range(0, num_sims, chunk_size):
+        states = random_sheet_states(
+            turn=i - 1,
+            num_sims=min(chunk_size, num_sims - start),
+            rng=state_rng,
+        )
+        comparisons.append(compare_policies(
+            i,
+            states,
+            models,
+            max_stones=max_stones,
+            searcher=greedy_comparison_searcher,
+            model_searcher=model_comparison_searcher,
+            perturbations=perturbations,
+            robust_top_fraction=robust_top_fraction,
+        ))
+
+    comparison = PolicyComparison(
+        initial_states=state.concat([item.initial_states for item in comparisons]),
+        model_scores=np.concatenate([item.model_scores for item in comparisons]),
+        greedy_scores=np.concatenate([item.greedy_scores for item in comparisons]),
+        model_throws=state.concat_throws([item.model_throws for item in comparisons]),
+        greedy_throws=state.concat_throws([item.greedy_throws for item in comparisons]),
     )
     print(i, policy_summary(comparison))
     write_policy_comparison(
