@@ -1,4 +1,5 @@
 import numpy as np
+from dataclasses import replace
 
 import self_play_training as sp
 import sequential_training as seq
@@ -36,3 +37,19 @@ def test_generate_self_play_batch_should_create_one_row_per_pre_final_throw_boar
     assert data.sheet_states.x.shape == (ROWS_PER_ITERATION, CONFIG.max_stones)
     assert data.final_scores.shape == (ROWS_PER_ITERATION,)
     assert np.all(np.abs(data.final_scores) <= CONFIG.num_stones_per_side)
+
+
+def test_generate_training_batch_should_return_expected_rows_and_scores():
+    config = replace(CONFIG, num_states=10)
+    model, normalizer = _untrained_model()
+
+    data = sp.generate_training_batch(
+        model, normalizer, config=config, rng=np.random.default_rng(2)
+    )
+
+    assert data.sheet_states.x.shape == (
+        config.num_states * BOARDS_PER_GAME,
+        config.max_stones,
+    )
+    assert data.final_scores.shape == (config.num_states * BOARDS_PER_GAME,)
+    assert np.all(np.abs(data.final_scores) <= config.num_stones_per_side)

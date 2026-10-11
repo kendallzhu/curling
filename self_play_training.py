@@ -41,7 +41,14 @@ class SelfPlayConfig:
     training_iterations: int = 30
     learning_rate: float = 0.5
     robust_top_fraction: float = 0.05
+    model_vs_greedy_game_fraction: float = 0.1
     perturbations: ThrowPerturbations = DEFAULT_THROW_PERTURBATIONS
+
+    def __post_init__(self) -> None:
+        if self.num_states <= 0:
+            raise ValueError("num_states must be positive")
+        if not 0.0 <= self.model_vs_greedy_game_fraction <= 1.0:
+            raise ValueError("model_vs_greedy_game_fraction must be between 0 and 1")
 
     def retention_probability(self) -> float:
         if self.halflife <= 0:
@@ -212,27 +219,135 @@ def label_visited_states(
     )
 
 
+def _generate_labeled_rollout(
+    start_states: state.SheetStates,
+    team0_policy: ThrowPolicy,
+    team1_policy: ThrowPolicy,
+    *,
+    config: SelfPlayConfig,
+    rng: np.random.Generator,
+) -> seq.SequentialDataset:
+    visited, final_state = rollout_games(
+        start_states, team0_policy, team1_policy, config=config, rng=rng
+    )
+    return label_visited_states(visited, final_state, config=config)
+
+
+def _generate_start_states(
+    num_games: int, *, config: SelfPlayConfig, rng: np.random.Generator
+) -> state.SheetStates:
+    if num_games <= 0:
+        raise ValueError("num_games must be positive")
+    if not 0 <= config.start_turn < config.max_stones:
+        raise ValueError(
+            f"start_turn must be in [0, {config.max_stones - 1}], got {config.start_turn}"
+        )
+    generator = seq.data_generation.generate_random_sheet_state_for_turn
+    return generator(turn=config.start_turn, num_sims=num_games, rng=rng)
+
+
 def generate_self_play_batch(
     model,
     normalizer: dataset.Normalizer,
     *,
     config: SelfPlayConfig,
     rng: np.random.Generator,
+    num_games: int | None = None,
 ) -> seq.SequentialDataset:
     """Generate labeled states from a sampled turn through the penultimate turn."""
-    if not 0 <= config.start_turn < config.max_stones:
-        raise ValueError(
-            f"start_turn must be in [0, {config.max_stones - 1}], got {config.start_turn}"
-        )
-    generator = seq.data_generation.generate_random_sheet_state_for_turn
-    start = generator(turn=config.start_turn, num_sims=config.num_states, rng=rng)
+    num_games = config.num_states if num_games is None else num_games
+    start = _generate_start_states(num_games, config=config, rng=rng)
     searcher = ThrowsGridSearcher(*config.grid_size)
-
     model_policy = model_throw_policy(model, normalizer, searcher, config)
-    visited, final_state = rollout_games(
+    return _generate_labeled_rollout(
         start, model_policy, model_policy, config=config, rng=rng
     )
-    return label_visited_states(visited, final_state, config=config)
+
+
+def generate_model_vs_greedy_batch(
+    model,
+    normalizer: dataset.Normalizer,
+    *,
+    config: SelfPlayConfig,
+    rng: np.random.Generator,
+    num_games: int,
+) -> seq.SequentialDataset:
+    """Generate labeled games with teams balanced across model and greedy play."""
+    if num_games <= 0:
+        raise ValueError("num_games must be positive")
+
+    model_teams = np.arange(num_games) % 2
+    if rng.integers(2):
+        model_teams = 1 - model_teams
+
+    searcher = ThrowsGridSearcher(*config.grid_size)
+    model_policy = model_throw_policy(model, normalizer, searcher, config)
+    greedy_policy = greedy_throw_policy(searcher, config)
+    batches = []
+    for model_team in (0, 1):
+        team_games = int(np.count_nonzero(model_teams == model_team))
+        if not team_games:
+            continue
+        start = _generate_start_states(team_games, config=config, rng=rng)
+        policies = (
+            (model_policy, greedy_policy)
+            if model_team == 0
+            else (greedy_policy, model_policy)
+        )
+        batches.append(
+            _generate_labeled_rollout(
+                start, *policies, config=config, rng=rng
+            )
+        )
+
+    states = state.concat([batch.sheet_states for batch in batches])
+    scores = np.concatenate([batch.final_scores for batch in batches])
+    return seq.SequentialDataset(
+        states, scores, config.max_stones, config.num_stones_per_side
+    )
+
+
+def generate_training_batch(
+    model,
+    normalizer: dataset.Normalizer,
+    *,
+    config: SelfPlayConfig,
+    rng: np.random.Generator,
+) -> seq.SequentialDataset:
+    """Mix self-play with the configured model-vs-greedy share.
+
+    The number of greedy games is rounded to the nearest whole game.
+    """
+    num_greedy_games = int(
+        config.num_states * config.model_vs_greedy_game_fraction + 0.5
+    )
+    num_self_play_games = config.num_states - num_greedy_games
+    batches = []
+
+    if num_self_play_games:
+        batches.append(
+            generate_self_play_batch(
+                model, normalizer, config=config, rng=rng,
+                num_games=num_self_play_games,
+            )
+        )
+
+    if num_greedy_games:
+        batches.append(
+            generate_model_vs_greedy_batch(
+                model,
+                normalizer,
+                config=config,
+                rng=rng,
+                num_games=num_greedy_games,
+            )
+        )
+
+    states = state.concat([batch.sheet_states for batch in batches])
+    scores = np.concatenate([batch.final_scores for batch in batches])
+    return seq.SequentialDataset(
+        states, scores, config.max_stones, config.num_stones_per_side
+    )
 
 
 def retain_and_combine(
@@ -373,6 +488,7 @@ def run_self_play(
                 "state_generator_version": "turn_based",
                 "sampled_start_turn": config.start_turn,
                 "sampled_start_states_per_iteration": config.num_states,
+                "model_vs_greedy_game_fraction": config.model_vs_greedy_game_fraction,
                 "model_controlled_turns": list(
                     range(config.start_turn + 1, config.max_stones)
                 ),
@@ -474,7 +590,7 @@ def run_self_play(
     results = {}
     for i in range(start, config.num_iterations + 1):
         rng = np.random.default_rng(seed + i)
-        generated = generate_self_play_batch(
+        generated = generate_training_batch(
             model, normalizer, config=config, rng=rng
         )
         combined = retain_and_combine(previous, generated, halflife=config.halflife, rng=rng)
