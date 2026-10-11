@@ -16,6 +16,8 @@ from presets import (
     guard_sheet_states,
 )
 from state import empty_board
+
+STONES_PER_SIDE = 5
 from user_interface import (
     render_sheet,
     render_ui,
@@ -40,15 +42,19 @@ def _run_bot_suggestions(sheet_states, team, v_network, v_normalizer):
     bot_throw, bot_exact_score, bot_weighted_score = bot.get_throw_grid_search(
         sheet_states, team
     )
-    try:
-        bot_throw_v, bot_v_exact_score, bot_v_weighted_score = bot.get_throw_v_argmax(
-            sheet_states,
-            team,
-            neural_network=v_network,
-            normalizer=v_normalizer,
-        )
-    except Exception:
-        bot_throw_v, bot_v_exact_score, bot_v_weighted_score = None, None, None
+    bot_throw_v, bot_v_exact_score, bot_v_weighted_score = None, None, None
+    stones_on_board = int(sheet_states.num_stones(0)[0] + sheet_states.num_stones(1)[0])
+    is_last_throw = stones_on_board >= v_network.num_stones - 1
+    if not is_last_throw:  # model is not trained on the final throw
+        try:
+            bot_throw_v, bot_v_exact_score, bot_v_weighted_score = bot.get_throw_v_argmax(
+                sheet_states,
+                team,
+                neural_network=v_network,
+                normalizer=v_normalizer,
+            )
+        except Exception:
+            pass
     return (
         bot_throw,
         bot_exact_score,
@@ -134,13 +140,13 @@ if __name__ == "__main__":
     window_height = window_width / 2 + PANEL_H
     screen = pygame.display.set_mode((window_width, window_height), pygame.RESIZABLE)
     previous_sheet_states = generate_random_sheet_state_for_turn(
-        turn=8, rng=np.random.default_rng()
+        turn=6, rng=np.random.default_rng()
     )  # guard_sheet_states()  # empty_board(1)
     timestep = 0.1
 
     ui_state = UIState()
     v_network, v_normalizer = curling_nn.load_v_weights(
-        constants.value_network_weights_path
+        "weights/self_play/round9_2k_v2/checkpoints/m_10.npz"
     )
 
     next_team_to_play = 1
@@ -168,7 +174,7 @@ if __name__ == "__main__":
                 preset_states=(
                     demo_collisions_sheet_states,
                     lambda: generate_random_sheet_state_for_turn(
-                        turn=8, rng=np.random.default_rng()
+                        turn=6, rng=np.random.default_rng()
                     ),
                 ),
             )
@@ -179,7 +185,18 @@ if __name__ == "__main__":
                 break
 
         render_sheet(screen, next_sheet_states.get_sheet(constants.ui_sim_index))
-        render_ui(screen, ui_state, score, next_team_to_play)
+        render_ui(
+            screen,
+            ui_state,
+            score,
+            next_team_to_play,
+            hammer_team=1 - int(previous_sheet_states.first_team[constants.ui_sim_index]),
+            stones_left=tuple(
+                STONES_PER_SIDE
+                - int(previous_sheet_states.num_stones(team)[constants.ui_sim_index])
+                for team in (0, 1)
+            ),
+        )
         if has_state_changed and not (next_sheet_states.is_any_stone_moving()):
             next_team_to_play = (
                 next_team_to_play

@@ -188,15 +188,28 @@ def _tile_throws_and_states(
 
 
 class ThrowsGridSearcher(ThrowSearcher):
-    def __init__(self, num_angles: int, num_speeds: int, num_y_vals: int):
+    def __init__(
+        self,
+        num_angles: int,
+        num_speeds: int,
+        num_y_vals: int,
+        rng: np.random.Generator | None = None,
+    ):
         self.num_angles = num_angles
         self.num_speeds = num_speeds
         self.num_y_vals = num_y_vals
+        self.rng = rng if rng is not None else np.random.default_rng()
+
+    def _shifted_linspace(self, low: float, high: float, num: int) -> np.ndarray:
+        # Random shift in [0, grid width) per dimension; clipped to stay in bounds.
+        step = (high - low) / (num - 1) if num > 1 else 0.0
+        offset = self.rng.uniform(0.0, step) if step > 0 else 0.0
+        return np.minimum(np.linspace(low, high, num) + offset, high)
 
     def get_throws(self, team: int):
-        angle_options = np.linspace(min_release_angle, max_release_angle, self.num_angles)
-        speed_options = np.linspace(min_release_speed, max_release_speed, self.num_speeds)
-        y_options = np.linspace(min_release_y, max_release_y, self.num_y_vals)
+        angle_options = self._shifted_linspace(min_release_angle, max_release_angle, self.num_angles)
+        speed_options = self._shifted_linspace(min_release_speed, max_release_speed, self.num_speeds)
+        y_options = self._shifted_linspace(min_release_y, max_release_y, self.num_y_vals)
 
         angles, speeds, turns, ys = np.meshgrid(
             angle_options, speed_options, turn_options, y_options, indexing='ij'
@@ -292,12 +305,18 @@ class ArgmaxThrowPolicy(CurlingPolicy):
         throw_searcher: ThrowSearcher,
         random_action_prob: float = 0.0,
     ):
+        max_stones = neural_network.num_stones
+
         def scoring_function(sheet_states: SheetStates, throws: Throws) -> np.ndarray:
             final_states = cached_physics.run_until_stopping(
                 sheet_states=add_stones_from_throws(sheet_states, throws)
             )
+            if final_states.x.shape[1] >= max_stones:
+                # Self-play never trains on full boards; the last throw is scored exactly.
+                return scoring.get_net_score_for_team(final_states, int(throws.team[0]))
+            padded = curling_nn.pad_sheet_states(final_states, max_stones)
             input_features = curling_nn.ValueInputFeatures.create_of_sheet_states(
-                final_states, normalizer, neural_network.num_stones
+                padded, normalizer, max_stones
             )
             nn_output = neural_network.run(input_features[:, :, None])
             expected = neural_network.expected_score(nn_output)

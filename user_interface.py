@@ -245,7 +245,16 @@ def render_preset_buttons(surface):
 
 
 def draw_panel(
-    surface, angle, speed, y_val, turn_val, score, bot_throw=None, bot_throw_v=None
+    surface,
+    angle,
+    speed,
+    y_val,
+    turn_val,
+    score,
+    bot_throw=None,
+    bot_throw_v=None,
+    hammer_team=None,
+    stones_left=None,
 ):
     sw, sh = surface.get_size()
     panel_y = sh - PANEL_H
@@ -345,6 +354,27 @@ def draw_panel(
     score_text = font.render(f"Red  {s0}  —  {s1}  Yellow", True, (220, 220, 220))
     surface.blit(score_text, (sw - 260, panel_y + 28))
 
+    score_x = sw - 260
+    red_cx = score_x + font.size("Red")[0] // 2
+    yellow_cx = (
+        score_x
+        + font.size(f"Red  {s0}  —  {s1}  ")[0]
+        + font.size("Yellow")[0] // 2
+    )
+
+    if stones_left is not None:
+        for cx, left in zip((red_cx, yellow_cx), stones_left):
+            left_text = font.render(f"{left} left", True, (180, 180, 180))
+            surface.blit(left_text, left_text.get_rect(midtop=(cx, panel_y + 52)))
+
+    if hammer_team is not None:
+        fill = (200, 50, 50) if hammer_team == 0 else (230, 200, 40)
+        center = ((red_cx, yellow_cx)[hammer_team], panel_y + 15)
+        pygame.draw.circle(surface, fill, center, 9)
+        pygame.draw.circle(surface, (255, 255, 255), center, 9, 2)
+        h_text = pygame.font.SysFont(None, 16).render("H", True, (0, 0, 0))
+        surface.blit(h_text, h_text.get_rect(center=center))
+
     return (
         btn_rect,
         bot_btn_rect,
@@ -356,7 +386,9 @@ def draw_panel(
     )
 
 
-def render_ui(surface, ui_state: UIState, score, next_team: int):
+def render_ui(
+    surface, ui_state: UIState, score, next_team: int, hammer_team=None, stones_left=None
+):
     throw = ui_state.to_next_throw(next_team)
     render_add_stone_preview(surface, throw)
     render_preset_buttons(surface)
@@ -369,6 +401,8 @@ def render_ui(surface, ui_state: UIState, score, next_team: int):
         score,
         ui_state.bot_throw,
         ui_state.bot_throw_v,
+        hammer_team,
+        stones_left,
     )
 
 

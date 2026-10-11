@@ -430,7 +430,7 @@ class GridAndRandomThrowSearcher:
         if rng is not None and seed is not None:
             raise ValueError("provide rng or seed, not both")
         rng = rng if rng is not None else np.random.default_rng(seed)
-        self.grid_searcher = ThrowsGridSearcher(*grid_size)
+        self.grid_searcher = ThrowsGridSearcher(*grid_size, rng=rng)
         self.random_searcher = RandomThrows(rng, random_count)
 
     def get_throws(self, team: int):
