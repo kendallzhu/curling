@@ -13,6 +13,7 @@ from pathlib import Path
 
 import numpy as np
 
+import curling_nn
 import dataset
 import nn
 import scoring
@@ -47,27 +48,7 @@ class SelfPlayConfig:
         return 2.0 ** (-1.0 / self.halflife)
 
 
-def _pad_states(sheet_states: state.SheetStates, max_stones: int) -> state.SheetStates:
-    """Pad variable-length rollout states to the network's fixed width."""
-    n_sims, n_stones = sheet_states.x.shape
-    if n_stones > max_stones:
-        raise ValueError("state has more stones than max_stones")
-    padding = max_stones - n_stones
-    if padding == 0:
-        return sheet_states
-    zeros = np.zeros((n_sims, padding))
-    return state.SheetStates(
-        first_team=sheet_states.first_team.copy(),
-        x=np.concatenate((sheet_states.x, zeros), axis=1),
-        y=np.concatenate((sheet_states.y, zeros), axis=1),
-        velocities=state.Velocities(
-            v=np.concatenate((sheet_states.velocities.v, zeros), axis=1),
-            theta=np.concatenate((sheet_states.velocities.theta, zeros), axis=1),
-        ),
-        rotation_directions=np.concatenate(
-            (sheet_states.rotation_directions, np.zeros_like(zeros, dtype=int)), axis=1
-        ),
-    )
+_pad_states = curling_nn.pad_sheet_states
 
 
 def _model_scores(model, normalizer, sheet_states, max_stones: int) -> np.ndarray:

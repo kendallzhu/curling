@@ -292,12 +292,18 @@ class ArgmaxThrowPolicy(CurlingPolicy):
         throw_searcher: ThrowSearcher,
         random_action_prob: float = 0.0,
     ):
+        max_stones = neural_network.num_stones
+
         def scoring_function(sheet_states: SheetStates, throws: Throws) -> np.ndarray:
             final_states = cached_physics.run_until_stopping(
                 sheet_states=add_stones_from_throws(sheet_states, throws)
             )
+            if final_states.x.shape[1] >= max_stones:
+                # Self-play never trains on full boards; the last throw is scored exactly.
+                return scoring.get_net_score_for_team(final_states, int(throws.team[0]))
+            padded = curling_nn.pad_sheet_states(final_states, max_stones)
             input_features = curling_nn.ValueInputFeatures.create_of_sheet_states(
-                final_states, normalizer, neural_network.num_stones
+                padded, normalizer, max_stones
             )
             nn_output = neural_network.run(input_features[:, :, None])
             expected = neural_network.expected_score(nn_output)

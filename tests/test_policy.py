@@ -8,10 +8,10 @@ from constants import NOT_IN_PLAY_X
 
 
 def test_value_network_scoring_flips_to_throwing_team_perspective(monkeypatch):
-    network = curling_nn.ValueNetwork(seed=0, num_stones=1, hidden_layer_size=4)
+    network = curling_nn.ValueNetwork(seed=0, num_stones=2, hidden_layer_size=4)
     network.expected_score = lambda outputs: np.full(outputs.shape[0], 2.0)
     normalizer = dataset.Normalizer(
-        feature_means=np.zeros(7), feature_stdevs=np.ones(7)
+        feature_means=np.zeros(13), feature_stdevs=np.ones(13)
     )
     policy = bot.ArgmaxThrowPolicy.from_value_network(
         neural_network=network,

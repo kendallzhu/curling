@@ -39,6 +39,29 @@ def validate_value_checkpoint_format(data) -> int:
     return num_stones
 
 
+def pad_sheet_states(sheet_states: state.SheetStates, max_stones: int) -> state.SheetStates:
+    """Zero-pad variable-length states to the network's fixed width, as in training."""
+    n_sims, n_stones = sheet_states.x.shape
+    if n_stones > max_stones:
+        raise ValueError("state has more stones than max_stones")
+    padding = max_stones - n_stones
+    if padding == 0:
+        return sheet_states
+    zeros = np.zeros((n_sims, padding))
+    return state.SheetStates(
+        first_team=sheet_states.first_team.copy(),
+        x=np.concatenate((sheet_states.x, zeros), axis=1),
+        y=np.concatenate((sheet_states.y, zeros), axis=1),
+        velocities=state.Velocities(
+            v=np.concatenate((sheet_states.velocities.v, zeros), axis=1),
+            theta=np.concatenate((sheet_states.velocities.theta, zeros), axis=1),
+        ),
+        rotation_directions=np.concatenate(
+            (sheet_states.rotation_directions, np.zeros_like(zeros, dtype=int)), axis=1
+        ),
+    )
+
+
 def raw_padded_sheet_state_features(
     sheet_states: state.SheetStates, max_stones: int
 ) -> np.ndarray:
