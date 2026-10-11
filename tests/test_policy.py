@@ -2,48 +2,8 @@ import numpy as np
 
 import bot
 import curling_nn
-import dataset
 import state
 from constants import NOT_IN_PLAY_X
-
-
-def test_q_network_scoring_function_team_sign_flip():
-    """Policy scoring flips sign with team perspective: Score(team 1) == -Score(team 0)."""
-    q_net = curling_nn.QNetwork(seed=42, num_stones=0, hidden_layer_size=8)
-    sheet_t0 = state.empty_board(1)
-    sheet_t1 = state.SheetStates(
-        first_team=np.array([1]),
-        x=np.zeros((1, 0)),
-        y=np.zeros((1, 0)),
-        velocities=state.Velocities(v=np.zeros((1, 0)), theta=np.zeros((1, 0))),
-        rotation_directions=np.zeros((1, 0), dtype=int),
-    )
-    dummy_throw = state.Throws(
-        angle_deg=np.array([0.0]),
-        speed=np.array([2.0]),
-        turn=np.array([0]),
-        y_val=np.array([2.5]),
-        team=np.array([0]),
-    )
-    raw = curling_nn.QInputFeatures.raw_of_sheet_states(sheet_t0, dummy_throw)
-    normalizer = dataset.Normalizer.from_features(raw)
-
-    searcher = bot.ThrowsGridSearcher(2, 2, 1)
-    policy = bot.ArgmaxThrowPolicy.from_q_network(
-        neural_network=q_net,
-        normalizer=normalizer,
-        throw_searcher=searcher,
-    )
-
-    t0_throws = searcher.get_throws(team=0)
-    t1_throws = searcher.get_throws(team=1)
-    tiled_t0 = state.tile_sheet_states(sheet_t0, t0_throws.angle_deg.size)
-    tiled_t1 = state.tile_sheet_states(sheet_t1, t1_throws.angle_deg.size)
-
-    score_t0 = policy.scoring_function(tiled_t0, t0_throws)
-    score_t1 = policy.scoring_function(tiled_t1, t1_throws)
-
-    np.testing.assert_allclose(score_t0, -score_t1, atol=1e-6)
 
 
 def test_robustness_selects_consistent_throw_over_fragile_peak():
@@ -73,30 +33,16 @@ def test_robustness_selects_consistent_throw_over_fragile_peak():
     assert chosen.angle_deg[0] == 5.0
 
 
-def test_v_input_feature_mask_ignores_out_of_play_coordinates():
-    """Features of stones out of play (NOT_IN_PLAY_X) are properly masked."""
-    # Two states: stone 1 is out of play in both, but with different dummy y coordinates
-    s1 = state.SheetStates(
+def test_padded_value_features_mark_thrown_and_future_slots():
+    board = state.SheetStates(
         first_team=np.array([0]),
         x=np.array([[38.0, NOT_IN_PLAY_X]]),
-        y=np.array([[2.5, 999.0]]),
-        velocities=state.Velocities(v=np.zeros((1, 2)), theta=np.zeros((1, 2))),
-        rotation_directions=np.zeros((1, 2), dtype=int),
-    )
-    s2 = state.SheetStates(
-        first_team=np.array([0]),
-        x=np.array([[38.0, NOT_IN_PLAY_X]]),
-        y=np.array([[2.5, -999.0]]),
+        y=np.array([[2.5, NOT_IN_PLAY_X]]),
         velocities=state.Velocities(v=np.zeros((1, 2)), theta=np.zeros((1, 2))),
         rotation_directions=np.zeros((1, 2), dtype=int),
     )
 
-    raw1 = curling_nn.VInputFeatures.raw_of_sheet_states(s1)
-    mask1 = curling_nn.raw_sheet_state_feature_mask(s1)
-    raw2 = curling_nn.VInputFeatures.raw_of_sheet_states(s2)
-    mask2 = curling_nn.raw_sheet_state_feature_mask(s2)
+    raw = curling_nn.ValueInputFeatures.raw_of_sheet_states(board, max_stones=4)
 
-    # Masks must be identical
-    np.testing.assert_array_equal(mask1, mask2)
-    # Valid (masked=True) raw features must be identical
-    np.testing.assert_array_equal(raw1[mask1], raw2[mask2])
+    np.testing.assert_array_equal(raw[0, 1:5], [0, 0, 1, 1])
+    np.testing.assert_array_equal(raw[0, 5:9], [1, 1, 0, 0])

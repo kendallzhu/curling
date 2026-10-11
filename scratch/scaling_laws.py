@@ -88,7 +88,10 @@ def train_value_network(
     initial_learning_rate: float = 0.05,
 ) -> curling_nn.ValueNetwork:
     """Train one value network using the same cosine schedule as training.ipynb."""
-    num_stones = (training_data.raw_inputs.shape[1] - 1) // 5
+    feature_width = training_data.raw_inputs.shape[1]
+    if (feature_width - 1) % 6:
+        raise ValueError("value data must use the padded self-play feature format")
+    num_stones = (feature_width - 1) // 6
     num_stones_per_side = (training_data.answers.shape[1] - 1) // 2
     network = curling_nn.ValueNetwork(
         seed=seed,

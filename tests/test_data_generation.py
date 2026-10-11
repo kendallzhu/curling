@@ -4,7 +4,6 @@ from inline_snapshot import snapshot
 from constants import center_of_target_house
 from data_generation import (
     generate_random_sheet_state_for_turn,
-    q_network_training_data,
     random_sheet_states,
     value_network_training_data,
 )
@@ -123,20 +122,6 @@ def test_generate_random_sheet_state_for_turn_supports_asymmetric_team_counts():
     assert sum(in_play for team, in_play in stones if team == 1) == 1
 
 
-def test_q_network_training_data_random_throws_only():
-    sheet_states = random_sheet_states(team1=1, team2=0, num_sims=3)
-    data = q_network_training_data(
-        sheet_states=sheet_states,
-        team=1,
-        rng=np.random.default_rng(0),
-        n_random_throws=4,
-        n_per_score=0,
-    )
-    assert data.size() == 12
-    assert data.answers.shape == (12, 3)
-    np.testing.assert_array_equal(data.answers.sum(axis=1), 1)
-
-
 def test_value_network_training_data_labels_final_score():
     sheet_states = random_sheet_states(team1=1, team2=0, num_sims=2)
     assert np.all(sheet_states.next_team_to_play() == 1)
@@ -146,7 +131,7 @@ def test_value_network_training_data_labels_final_score():
         rng=np.random.default_rng(0),
     )
     assert data.size() == 2
-    assert data.raw_inputs.shape == (2, 5 * 1 + 1)
+    assert data.raw_inputs.shape == (2, 1 + 6 * 2)
     # One throw left; end has 2 stones, scores in [-1, 1].
     assert data.answers.shape == (2, 3)
     np.testing.assert_array_equal(data.answers.sum(axis=1), 1)

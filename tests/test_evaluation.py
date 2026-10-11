@@ -31,10 +31,10 @@ def test_second_to_last_policy_comparison_has_both_policies(tmp_path):
         seed=0, num_sims=2
     )
     value_network = curling_nn.ValueNetwork(
-        seed=0, num_stones=9, num_stones_per_side=5
+        seed=0, num_stones=10, num_stones_per_side=5
     )
     normalizer = dataset.Normalizer(
-        feature_means=np.zeros(46), feature_stdevs=np.ones(46)
+        feature_means=np.zeros(61), feature_stdevs=np.ones(61)
     )
 
     comparison = evaluation.compare_second_to_last_policies(

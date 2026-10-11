@@ -8,50 +8,32 @@ import numpy as np
 import nn
 import dataset
 import state
-from constants import NOT_IN_PLAY_X, house_outer_circle_radius, STONE_RADIUS_M
+from constants import house_outer_circle_radius, STONE_RADIUS_M
 
 
-def raw_sheet_state_features(sheet_states: state.SheetStates) -> np.ndarray:
-    is_thrown = np.where(sheet_states.x == NOT_IN_PLAY_X, 0, 1)
-    distance_from_center = sheet_states.distance_from_center_of_house()
-    is_in_house = np.where(
-        distance_from_center < house_outer_circle_radius + STONE_RADIUS_M,
-        1,
-        0,
-    )
-    num_sims = sheet_states.x.shape[0]
+def raw_padded_sheet_state_features(
+    sheet_states: state.SheetStates, max_stones: int
+) -> np.ndarray:
+    """Encode variable-length boards in the fixed-width self-play format."""
+    n_sims, n_stones = sheet_states.x.shape
+    if n_stones > max_stones:
+        raise ValueError(f"state has {n_stones} stones, maximum is {max_stones}")
+    x = np.zeros((n_sims, max_stones), dtype=float)
+    y = np.zeros_like(x)
+    distance = np.zeros_like(x)
+    in_house = np.zeros_like(x)
+    x[:, :n_stones] = sheet_states.x
+    y[:, :n_stones] = sheet_states.y
+    if n_stones:
+        distance[:, :n_stones] = sheet_states.distance_from_center_of_house()
+        in_house[:, :n_stones] = (
+            distance[:, :n_stones] < house_outer_circle_radius + STONE_RADIUS_M
+        )
+    thrown = np.zeros_like(x)
+    thrown[:, :n_stones] = 1.0
+    not_thrown = 1.0 - thrown
     return np.concatenate(
-        [
-            sheet_states.first_team.reshape((num_sims, 1)),
-            is_thrown,
-            sheet_states.x,
-            sheet_states.y,
-            distance_from_center,
-            is_in_house,
-        ],
-        axis=1,
-    )
-
-
-def raw_sheet_state_feature_mask(sheet_states: state.SheetStates) -> np.ndarray:
-    """Presence mask matching raw_sheet_state_features' column layout.
-
-    True for columns reflecting a real stone; False for x/y/distance/is_in_house
-    entries of stones not currently in play (x == NOT_IN_PLAY_X), so a
-    Normalizer can exclude those placeholders from its statistics.
-    """
-    is_thrown = np.where(sheet_states.x == NOT_IN_PLAY_X, 0, 1).astype(bool)
-    num_sims = sheet_states.x.shape[0]
-    always_present = np.ones((num_sims, 1), dtype=bool)
-    return np.concatenate(
-        [
-            always_present,  # first_team
-            np.ones_like(is_thrown),  # is_thrown is itself always meaningful
-            is_thrown,  # x
-            is_thrown,  # y
-            is_thrown,  # distance_from_center
-            is_thrown,  # is_in_house
-        ],
+        [sheet_states.first_team[:, None], not_thrown, thrown, x, y, distance, in_house],
         axis=1,
     )
 
@@ -78,90 +60,34 @@ def _score_match_dataset(
     )
 
 
-class QInputFeatures:
+class ValueInputFeatures:
     @staticmethod
     def raw_of_sheet_states(
-        sheet_states: state.SheetStates, throws: state.Throws
+        sheet_states: state.SheetStates, max_stones: int
     ) -> np.ndarray:
-        next_team_to_play = sheet_states.next_team_to_play()
-        assert (throws.team == next_team_to_play).all()
-        num_sims = sheet_states.x.shape[0]
-        return np.concatenate(
-            [
-                raw_sheet_state_features(sheet_states),
-                throws.angle_deg.reshape((num_sims, 1)),
-                throws.speed.reshape((num_sims, 1)),
-                throws.y_val.reshape((num_sims, 1)),
-                np.where(throws.turn == 1, 1, 0).reshape((num_sims, 1)),
-                np.where(throws.turn == 0, 1, 0).reshape((num_sims, 1)),
-                np.where(throws.turn == -1, 1, 0).reshape((num_sims, 1)),
-            ],
-            axis=1,
-        )
-
-    @staticmethod
-    def raw_mask_of_sheet_states(
-        sheet_states: state.SheetStates, throws: state.Throws
-    ) -> np.ndarray:
-        num_sims = sheet_states.x.shape[0]
-        # The throw being evaluated is always real, so its columns are always present.
-        always_present = np.ones((num_sims, 6), dtype=bool)
-        return np.concatenate(
-            [raw_sheet_state_feature_mask(sheet_states), always_present], axis=1
-        )
-
-    @staticmethod
-    def create_of_sheet_states(
-        sheet_states: state.SheetStates,
-        throws: state.Throws,
-        normalizer: dataset.Normalizer,
-    ) -> np.ndarray:
-        return normalizer.normalize(
-            QInputFeatures.raw_of_sheet_states(sheet_states, throws),
-            QInputFeatures.raw_mask_of_sheet_states(sheet_states, throws),
-        )
-
-    @staticmethod
-    def create_score_match_dataset_from_sheet_states(
-        sheet_states: state.SheetStates,
-        throws: state.Throws,
-        final_scores: np.ndarray,
-        num_stones_per_side: int,
-    ) -> dataset.TrainingData:
-        return _score_match_dataset(
-            QInputFeatures.raw_of_sheet_states(sheet_states, throws),
-            final_scores,
-            num_stones_per_side,
-            QInputFeatures.raw_mask_of_sheet_states(sheet_states, throws),
-        )
-
-
-class VInputFeatures:
-    @staticmethod
-    def raw_of_sheet_states(sheet_states: state.SheetStates) -> np.ndarray:
-        return raw_sheet_state_features(sheet_states)
+        return raw_padded_sheet_state_features(sheet_states, max_stones)
 
     @staticmethod
     def create_score_match_dataset_from_sheet_states(
         sheet_states: state.SheetStates,
         final_scores: np.ndarray,
         num_stones_per_side: int,
+        max_stones: int,
     ) -> dataset.TrainingData:
         return _score_match_dataset(
-            VInputFeatures.raw_of_sheet_states(sheet_states),
+            ValueInputFeatures.raw_of_sheet_states(sheet_states, max_stones),
             final_scores,
             num_stones_per_side,
-            raw_sheet_state_feature_mask(sheet_states),
         )
 
     @staticmethod
     def create_of_sheet_states(
         sheet_states: state.SheetStates,
         normalizer: dataset.Normalizer,
+        max_stones: int,
     ) -> np.ndarray:
         return normalizer.normalize(
-            VInputFeatures.raw_of_sheet_states(sheet_states),
-            raw_sheet_state_feature_mask(sheet_states),
+            ValueInputFeatures.raw_of_sheet_states(sheet_states, max_stones)
         )
 
 
@@ -250,24 +176,6 @@ def print_trainable_parameter_info(neural_network: ScoreNetwork) -> int:
     return total
 
 
-class QNetwork(ScoreNetwork):
-    def __init__(
-        self,
-        seed: int,
-        num_stones: int,
-        hidden_layer_size: int = 20,
-        output_layer_size: int | None = None,
-    ):
-        super().__init__(
-            seed=seed,
-            num_stones=num_stones,
-            input_layer_size=5 * num_stones + 7,
-            hidden_layer_size=hidden_layer_size,
-            num_stones_per_side=(num_stones + 1) // 2,
-            output_layer_size=output_layer_size,
-        )
-
-
 class ValueNetwork(ScoreNetwork):
     def __init__(
         self,
@@ -282,7 +190,7 @@ class ValueNetwork(ScoreNetwork):
         super().__init__(
             seed=seed,
             num_stones=num_stones,
-            input_layer_size=5 * num_stones + 1,
+            input_layer_size=1 + 6 * num_stones,
             hidden_layer_size=hidden_layer_size,
             num_stones_per_side=num_stones_per_side,
             output_layer_size=output_layer_size,
@@ -321,25 +229,6 @@ def _load_normalizer_and_layers(
     )
 
 
-def write_q_weights(
-    path: str | Path,
-    neural_network: QNetwork,
-    normalizer: dataset.Normalizer,
-) -> None:
-    _write_score_weights(path, neural_network, normalizer)
-
-
-def load_q_weights(path: str | Path) -> tuple[QNetwork, dataset.Normalizer]:
-    with np.load(path) as data:
-        neural_network = QNetwork(
-            seed=0,
-            num_stones=int(data["num_stones"]),
-            hidden_layer_size=int(data["hidden_layer_size"]),
-        )
-        normalizer = _load_normalizer_and_layers(data, neural_network)
-    return neural_network, normalizer
-
-
 def write_v_weights(
     path: str | Path,
     neural_network: ValueNetwork,
@@ -348,13 +237,22 @@ def write_v_weights(
     _write_score_weights(path, neural_network, normalizer)
 
 
-def load_v_weights(path: str | Path) -> tuple[ValueNetwork, dataset.Normalizer]:
+def load_v_weights(
+    path: str | Path,
+) -> tuple[ValueNetwork, dataset.Normalizer]:
     with np.load(path) as data:
         num_stones = int(data["num_stones"])
         if "num_stones_per_side" in data:
             num_stones_per_side = int(data["num_stones_per_side"])
         else:
             num_stones_per_side = (num_stones + 1) // 2
+        input_width = int(data["w0"].shape[1])
+        expected_input_width = 1 + 6 * num_stones
+        if input_width != expected_input_width:
+            raise ValueError(
+                f"incompatible value checkpoint: expected {expected_input_width} "
+                f"self-play features, found {input_width}"
+            )
         neural_network = ValueNetwork(
             seed=0,
             num_stones=num_stones,

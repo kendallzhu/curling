@@ -94,54 +94,10 @@ def test_physics_ignores_not_in_play_placeholder_stones():
     assert np.all(final.velocities.v == 0)
 
 
-def test_sample_throws_by_score_on_enemy_button_with_friend_in_house():
-    # Stone 0 = team 0 (friend, in house but back). Stone 1 = team 1 (enemy on button).
-    # Even stone count + first_team=0 => team 0 to throw.
-    board = SheetStates(
-        first_team=np.array([0]),
-        x=np.array([[center_of_target_house + 1.2, center_of_target_house]]),
-        y=np.array([[center_line_y, center_line_y]]),
-        velocities=Velocities(
-            v=np.zeros((1, 2)),
-            theta=np.zeros((1, 2)),
-        ),
-        rotation_directions=np.zeros((1, 2), dtype=int),
-    )
-    assert board.next_team_to_play()[0] == 0
-    assert np.array_equal(board.stone_teams()[0], [0, 1])
-
-    throws, states = data_generation.sample_throws_by_score_for_sheets(
-        sheet_states=board,
-        team=0,
-        throw_searcher=bot.ThrowsGridSearcher(10, 10, 4),
-        n_per_score=1,
-        rng=np.random.default_rng(0),
-    )
-    final_states = physics.run_until_stopping(
-        sheet_states=add_stones_from_throws(states, throws)
-    )
-    scores = scoring.get_net_score_for_team(final_states, team=0)
-
-    for i, score in enumerate(scores):
-        print(
-            f"score={int(score):+d}  "
-            f"angle={throws.angle_deg[i]:.3f}  "
-            f"speed={throws.speed[i]:.3f}  "
-            f"turn={int(throws.turn[i])}  "
-            f"y={throws.y_val[i]:.3f}"
-        )
-
-    expected_scores = {-1, 1, 2}
-    other_scores = sorted(set(scores.tolist()) - expected_scores)
-    assert other_scores == [], f"unexpected scores returned: {other_scores}"
-    for score in expected_scores:
-        assert (scores == score).sum() == 1, f"expected one throw with score {score:+d}"
-
-
 def test_get_throw_v_argmax():
     neural_network = curling_nn.ValueNetwork(seed=0, num_stones=2, hidden_layer_size=4)
-    raw = curling_nn.VInputFeatures.raw_of_sheet_states(
-        data_generation.random_sheet_states(team1=1, team2=1, num_sims=1)
+    raw = curling_nn.ValueInputFeatures.raw_of_sheet_states(
+        data_generation.random_sheet_states(team1=1, team2=1, num_sims=1), 2
     )
     normalizer = dataset.Normalizer.from_features(raw)
     searcher = bot.ThrowsGridSearcher(2, 2, 1)
@@ -160,45 +116,36 @@ def test_get_throw_v_argmax():
     assert weighted_score is not None
 
 
-def test_get_throw_q_argmax_returns_scores():
-    neural_network = curling_nn.QNetwork(seed=0, num_stones=1, hidden_layer_size=4)
-    raw = curling_nn.QInputFeatures.raw_of_sheet_states(
-        data_generation.random_sheet_states(team1=1, team2=0, num_sims=1),
-        state.Throws(
-            angle_deg=np.array([0.0]),
-            speed=np.array([2.0]),
-            turn=np.array([0]),
-            y_val=np.array([2.5]),
-            team=np.array([1]),
-        ),
+def test_get_throw_v_argmax_loads_sequential_checkpoint(tmp_path):
+    from scratch import sequential_training
+
+    neural_network = sequential_training.make_model(
+        seed=0, max_stones=10, num_stones_per_side=5, hidden_layer_size=4,
     )
-    normalizer = dataset.Normalizer.from_features(raw)
+    normalizer = dataset.Normalizer(
+        feature_means=np.zeros(61), feature_stdevs=np.ones(61)
+    )
+    checkpoint = tmp_path / "m_1.npz"
+    sequential_training.write_model(checkpoint, neural_network, normalizer)
+    neural_network, normalizer = curling_nn.load_v_weights(checkpoint)
+
+    assert isinstance(neural_network, curling_nn.ValueNetwork)
     searcher = bot.ThrowsGridSearcher(2, 2, 1)
 
-    wrong_stone_count = data_generation.random_sheet_states(team1=1, team2=1, num_sims=1)
-    throw, exact_score, weighted_score = bot.get_throw_q_argmax(
-        wrong_stone_count,
-        0,
-        throw_searcher=searcher,
-        neural_network=neural_network,
-        normalizer=normalizer,
-    )
-    assert throw is None
-    assert exact_score is None
-    assert weighted_score is None
-
-    matching_sheet = data_generation.random_sheet_states(team1=1, team2=0, num_sims=1)
-    throw, exact_score, weighted_score = bot.get_throw_q_argmax(
-        matching_sheet,
-        1,
-        throw_searcher=searcher,
-        neural_network=neural_network,
-        normalizer=normalizer,
-    )
-    assert throw is not None
-    assert throw.team == 1
-    assert exact_score is not None
-    assert weighted_score is not None
+    for turn in (6, 7, 8):
+        sheet = data_generation.generate_random_sheet_state_for_turn(
+            turn=turn, num_sims=1, rng=np.random.default_rng(turn)
+        )
+        throw, exact_score, weighted_score = bot.get_throw_v_argmax(
+            sheet,
+            int(sheet.next_team_to_play()[0]),
+            throw_searcher=searcher,
+            neural_network=neural_network,
+            normalizer=normalizer,
+        )
+        assert throw is not None
+        assert exact_score is not None
+        assert weighted_score is not None
 
 
 def test_throws_get_throw():

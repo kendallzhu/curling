@@ -79,8 +79,8 @@ def write_value_network_training_data_shards(
         )
         final_scores = scoring.get_net_score_for_team(final_states, 0)
         stones_per_side = (batch_states.x.shape[1] + 1) // 2
-        batch_data = curling_nn.VInputFeatures.create_score_match_dataset_from_sheet_states(
-            batch_states, final_scores, stones_per_side
+        batch_data = curling_nn.ValueInputFeatures.create_score_match_dataset_from_sheet_states(
+            batch_states, final_scores, stones_per_side, 2 * stones_per_side
         )
         dataset.write_training_data_shard(output_dir, batch_data, name=name)
 

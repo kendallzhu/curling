@@ -1,6 +1,6 @@
 # Curling Simulator
 
-Vectorized curling simulation with Numba physics, actual scoring, grid-search and Q-network throw selection, a small neural-network training stack, and a Pygame demo.
+Vectorized curling simulation with Numba physics, actual scoring, grid-search and value-network throw selection, a small neural-network training stack, and a Pygame demo.
 
 ## Project guidance
 
@@ -27,29 +27,26 @@ Vectorized curling simulation with Numba physics, actual scoring, grid-search an
   - `RandomThrows` generates random candidates.
   - `score_throws_by_net_score` runs physics and scores candidates.
   - `get_throw_grid_search` chooses a throw by weighted fixed-angle robustness.
-  - `ArgmaxThrowPolicy` supports actual-score, Q-network, and value-network scoring.
-  - `get_throw_q_argmax` / `get_throw_v_argmax` load saved weights when a network is not supplied.
+  - `ArgmaxThrowPolicy` supports actual-score and value-network scoring.
+  - `get_throw_v_argmax` loads saved weights when a network is not supplied.
 - `data_generation.py` – Dataset and batched throw-selection helpers.
   - `random_sheet_states` creates random boards.
   - `sample_throws_by_score_for_sheets` samples throws by score.
   - `best_throws_for_sheets` selects robust throws using fixed weighted angle offsets. It returns only `Throws`, in the same order as the input states.
-  - `scoring_function_of_nn` creates a Q-network expected-score function.
-  - `scoring_function_of_nn_score_std` creates a function returning predicted score standard deviation from the Q distribution.
-  - `best_throws_for_sheets_by_nn` selects throws using only Q-network predictions, without physics or actual scoring.
   - `score_throws_by_actual_score` applies throws, runs physics, and returns actual net scores.
   - `combine_throw_datasets` concatenates `(Throws, SheetStates)` datasets.
 
 ### Neural network and data
 
 - `nn.py` – Small batched neural-network implementation (`NN`, `LinearBatched`, `Max0`, loss functions, and `softmax`).
-- `curling_nn.py` – Q-network model and feature construction.
-  - `QInputFeatures` converts sheet/throw pairs into normalized model features.
-  - `QNetwork` predicts a categorical net-score distribution and provides `expected_score`.
-  - `load_q_weights` and `write_q_weights` handle model weights plus the feature normalizer.
+- `curling_nn.py` – Value-network model and feature construction.
+  - `ValueInputFeatures` encodes variable-length boards in the fixed-width self-play format.
+  - `ValueNetwork` predicts a categorical net-score distribution and provides `expected_score`.
+  - `load_v_weights` and `write_v_weights` handle model weights plus the feature normalizer.
 - `dataset.py` – `Normalizer`, `TrainingData`, batching, partitioning, the spiral example dataset, and shard IO (`write_training_data_shard` / `load_training_data_dir`).
-- `training.ipynb` – Current training/exploration notebook.
-- `weights/` – Checked-in saved Q and value network weights plus normalizers.
-- `datasets/` – Checked-in shards under `value_network/` and `q_network/`. Generate writes a new file; load concatenates `raw_inputs` and refits the normalizer.
+- `training.ipynb` – Legacy notebook; its Q workflow and pre-self-play value features are no longer supported.
+- `weights/` – Checked-in value-network weights and normalizers. Existing weights must use the padded self-play feature format.
+- `datasets/` – Value-network shards. Loading concatenates `raw_inputs` and refits the normalizer.
 - `scratch/nn_scratch_old.ipynb` – Older neural-network scratch notebook.
 
 ### Demo and UI
@@ -63,7 +60,7 @@ Vectorized curling simulation with Numba physics, actual scoring, grid-search an
 
 - `tests/test_bot.py` – Throw sampling behavior.
 - `tests/test_data_generation.py` – Random-state generation.
-- `tests/test_curling_nn.py` – Q-network training and weight persistence.
+- `tests/test_curling_nn.py` – Value-network features and weight persistence.
 - `tests/test_nn.py` – Neural-network gradient/training behavior.
 - `scratch/test_best_throws_vectorized.py` – Regression test comparing vectorized robustness selection with the previous per-state behavior.
 - `benchmark.py` – Compares `scratch.physics_numpy` and `physics_numba` on large batches; it is a script, not a unit test.
@@ -73,10 +70,6 @@ Vectorized curling simulation with Numba physics, actual scoring, grid-search an
 ### Batch and throw ordering
 
 Searchers return throws and tiled states in candidate-major/state-minor order. For `n_candidates` and `num_sims`, reshape scores as `(n_candidates, num_sims)`. The selected throw index for simulation `i` is `candidate_index * num_sims + i`.
-
-### Q-network perspective
-
-The Q network predicts team-0 net score. Scoring helpers multiply by `1` for team 0 and `-1` for team 1 so higher values always favor the throwing team. Score standard deviation is unchanged by that sign flip.
 
 ### Robustness
 
@@ -98,11 +91,4 @@ python demo.py
 python benchmark.py
 ```
 
-The saved Q network can be loaded with:
-
-```python
-import curling_nn
-from constants import q_network_weights_path
-
-q_network, normalizer = curling_nn.load_q_weights(q_network_weights_path)
-```
+Legacy Q-network APIs and the pre-self-play value feature format are unsupported.

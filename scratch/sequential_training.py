@@ -244,27 +244,7 @@ def raw_padded_sheet_state_features(
     sheet_states: state.SheetStates, max_stones: int
 ) -> np.ndarray:
     """Return fixed-width features for states containing 0..max_stones stones."""
-    n_sims, n_stones = sheet_states.x.shape
-    if n_stones > max_stones:
-        raise ValueError(f"state has {n_stones} stones, maximum is {max_stones}")
-    x = np.zeros((n_sims, max_stones), dtype=float)
-    y = np.zeros_like(x)
-    distance = np.zeros_like(x)
-    in_house = np.zeros_like(x)
-    x[:, :n_stones] = sheet_states.x
-    y[:, :n_stones] = sheet_states.y
-    if n_stones:
-        distance[:, :n_stones] = sheet_states.distance_from_center_of_house()
-        in_house[:, :n_stones] = (
-            distance[:, :n_stones] < curling_nn.house_outer_circle_radius + curling_nn.STONE_RADIUS_M
-        )
-    thrown = np.zeros_like(x)
-    thrown[:, :n_stones] = 1.0
-    not_thrown = 1.0 - thrown
-    return np.concatenate(
-        [sheet_states.first_team[:, None], not_thrown, thrown, x, y, distance, in_house],
-        axis=1,
-    )
+    return curling_nn.raw_padded_sheet_state_features(sheet_states, max_stones)
 
 
 def padded_training_data(
@@ -362,9 +342,11 @@ def load_sequential_dataset(path: str | Path) -> SequentialDataset:
 
 
 def make_model(*, seed: int, max_stones: int, num_stones_per_side: int, hidden_layer_size: int = 20):
-    return curling_nn.ScoreNetwork(
-        seed=seed, num_stones=max_stones, input_layer_size=feature_width(max_stones),
-        hidden_layer_size=hidden_layer_size, num_stones_per_side=num_stones_per_side,
+    return curling_nn.ValueNetwork(
+        seed=seed,
+        num_stones=max_stones,
+        hidden_layer_size=hidden_layer_size,
+        num_stones_per_side=num_stones_per_side,
     )
 
 

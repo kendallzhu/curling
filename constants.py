@@ -37,8 +37,5 @@ _repo_root = os.path.dirname(os.path.abspath(__file__))
 weights_dir = os.path.join(_repo_root, "weights")
 datasets_dir = os.path.join(_repo_root, "datasets")
 
-# Checked into git; overwrite after training via curling_nn.write_q_weights
-q_network_weights_path = os.path.join(weights_dir, "q_network_weights.npz")
 value_network_weights_path = os.path.join(weights_dir, "value_network_weights.npz")
-q_network_datasets_dir = os.path.join(datasets_dir, "q_network")
 value_network_datasets_dir = os.path.join(datasets_dir, "value_network")

@@ -4,12 +4,11 @@ import numpy as np
 
 import state
 import curling_nn
-import nn
 import dataset
 import physics
 from physics_cache import cached_physics
 import scoring
-from dataset import Normalizer, TrainingData
+from dataset import TrainingData
 from bot import (
     ArgmaxThrowPolicy,
     RandomThrows,
@@ -73,8 +72,7 @@ def random_sheet_states(
 # real curling), each throw adds one stone, and a throw may knock one or two
 # of the opponent's currently-in-play stones out of the game. Knocked-out
 # stones stay as columns (matching the alternating team-parity layout
-# elsewhere) but are placed at NOT_IN_PLAY_X, the same "not present" sentinel
-# already read by curling_nn.raw_sheet_state_features' is_thrown feature.
+# elsewhere) but are placed at NOT_IN_PLAY_X, the board's not-in-play sentinel.
 _TURN_REMOVE_PROB = 0.5
 _TURN_REMOVE_TWO_PROB = 0.15
 
@@ -124,166 +122,11 @@ def generate_random_sheet_state_for_turn(
     )
 
 
-def scoring_function_of_nn(
-    neural_network: curling_nn.QNetwork,
-    normalizer: Normalizer,
-) -> Callable[[state.SheetStates, state.Throws], np.ndarray]:
-    """Create a throw scoring function from a trained value network.
-
-    The network predicts team-0's expected net score.  Scores are flipped for
-    team 1 so the returned function always scores from the throwing team's
-    perspective.
-    """
-
-    def scoring_function(
-        sheet_states: state.SheetStates, throws: state.Throws
-    ) -> np.ndarray:
-        input_features = curling_nn.QInputFeatures.create_of_sheet_states(
-            sheet_states, throws, normalizer
-        )
-        nn_output = neural_network.run(input_features[:, :, None])
-        expected_score = neural_network.expected_score(nn_output)
-        return np.where(throws.team == 0, 1, -1) * expected_score
-
-    return scoring_function
-
-
-def scoring_function_of_nn_score_std(
-    neural_network: curling_nn.QNetwork,
-    normalizer: Normalizer,
-) -> Callable[[state.SheetStates, state.Throws], np.ndarray]:
-    """Create a scoring function returning predicted score standard deviation."""
-
-    score_values = np.arange(
-        -neural_network.num_stones_per_side,
-        neural_network.num_stones_per_side + 1,
-    )
-
-    def scoring_function(
-        sheet_states: state.SheetStates, throws: state.Throws
-    ) -> np.ndarray:
-        input_features = curling_nn.QInputFeatures.create_of_sheet_states(
-            sheet_states, throws, normalizer
-        )
-        probabilities = nn.softmax(neural_network.run(input_features[:, :, None]))
-        probabilities = probabilities.reshape((probabilities.shape[0], -1))
-        expected_score = probabilities @ score_values
-        expected_score_squared = probabilities @ (score_values**2)
-        variance = expected_score_squared - expected_score**2
-        return np.sqrt(np.maximum(variance, 0.0))
-
-    return scoring_function
-
-
 def score_throws_by_actual_score(
     sheet_states: state.SheetStates, throws: state.Throws
 ) -> np.ndarray:
     """Score candidate throws using the physics simulation and actual scoring."""
     return score_throws_by_net_score(sheet_states, throws)
-
-
-def best_throws_for_sheets_by_nn(
-    *,
-    sheet_states: state.SheetStates,
-    team: int,
-    throw_searcher: ThrowSearcher,
-    neural_network: curling_nn.QNetwork,
-    normalizer: Normalizer,
-) -> state.Throws:
-    """Return each state's highest-scoring throw according to a value network.
-
-    This evaluates the complete throw-searcher candidate set using the neural
-    network and does not run physics or actual scoring.
-    """
-    num_sims = sheet_states.x.shape[0]
-    if num_sims == 0:
-        return state.Throws(
-            angle_deg=np.array([]),
-            speed=np.array([]),
-            turn=np.array([], dtype=int),
-            y_val=np.array([]),
-            team=np.array([], dtype=int),
-        )
-
-    candidate_throws, tiled_states = throw_searcher.get_throws_for_num_sims(
-        team=team, sheet_states=sheet_states
-    )
-    if tiled_states.x.shape[0] % num_sims != 0:
-        raise ValueError(
-            "throw_searcher must return a whole number of candidate throws per state"
-        )
-    if candidate_throws.angle_deg.shape[0] != tiled_states.x.shape[0]:
-        raise ValueError("throw_searcher returned mismatched throws and states")
-
-    n_candidates = tiled_states.x.shape[0] // num_sims
-    scores = scoring_function_of_nn(neural_network, normalizer)(
-        tiled_states, candidate_throws
-    ).reshape((n_candidates, num_sims))
-    candidate_indices = (
-        np.argmax(scores, axis=0) * num_sims + np.arange(num_sims)
-    )
-    return state.Throws(
-        angle_deg=candidate_throws.angle_deg[candidate_indices],
-        speed=candidate_throws.speed[candidate_indices],
-        turn=candidate_throws.turn[candidate_indices],
-        y_val=candidate_throws.y_val[candidate_indices],
-        team=candidate_throws.team[candidate_indices],
-    )
-
-
-def sample_throws_by_score_for_sheets(
-    *,
-    sheet_states: state.SheetStates,
-    team: int,
-    throw_searcher: ThrowSearcher,
-    n_per_score: int,
-    rng: np.random.Generator,
-    scoring_function: Callable[
-        [state.SheetStates, state.Throws], np.ndarray
-    ] = score_throws_by_net_score,
-    scores_to_sample: np.ndarray | None = None,
-) -> tuple[state.Throws, state.SheetStates]:
-    """Per sheet, sample up to n_per_score candidate throws from each distinct score.
-
-    If scores_to_sample is set, only those score values are sampled (candidates are
-    still generated/scored from the full throw_searcher grid).
-    """
-    if n_per_score < 1:
-        raise ValueError(f"n_per_score must be >= 1, got {n_per_score}")
-    num_sims = sheet_states.x.shape[0]
-    candidate_throws, tiled_states = throw_searcher.get_throws_for_num_sims(
-        team=team, sheet_states=sheet_states
-    )
-    n_candidates = tiled_states.x.shape[0] // num_sims
-    scores = scoring_function(tiled_states, candidate_throws).reshape(
-        (n_candidates, num_sims)
-    )
-
-    throw_indices: list[int] = []
-    state_indices: list[int] = []
-    for sim in range(num_sims):
-        score_values = np.unique(scores[:, sim])
-        if scores_to_sample is not None:
-            score_values = score_values[np.isin(score_values, scores_to_sample)]
-        for score_value in score_values:
-            candidates = np.flatnonzero(scores[:, sim] == score_value)
-            k = min(n_per_score, candidates.size)
-            chosen = rng.choice(candidates, size=k, replace=False)
-            for throw_idx in chosen:
-                throw_indices.append(int(throw_idx * num_sims + sim))
-                state_indices.append(sim)
-
-    indices = np.asarray(throw_indices, dtype=int)
-    return (
-        state.Throws(
-            angle_deg=candidate_throws.angle_deg[indices],
-            speed=candidate_throws.speed[indices],
-            turn=candidate_throws.turn[indices],
-            y_val=candidate_throws.y_val[indices],
-            team=candidate_throws.team[indices],
-        ),
-        state.take_sheet_states(sheet_states, np.asarray(state_indices, dtype=int)),
-    )
 
 
 def best_throws_for_sheets(
@@ -301,49 +144,6 @@ def best_throws_for_sheets(
         throw_searcher=throw_searcher,
     )
     return policy.make_throws(sheet_states, team)
-
-
-def combine_throw_datasets(
-    *datasets: tuple[state.Throws, state.SheetStates],
-) -> tuple[state.Throws, state.SheetStates]:
-    throws_list = [throws for throws, _ in datasets]
-    states_list = [states for _, states in datasets]
-    return state.concat_throws(throws_list), state.concat(states_list)
-
-
-def _sampled_throws_and_states(
-    *,
-    sheet_states: state.SheetStates,
-    team: int,
-    rng: np.random.Generator,
-    n_random_throws: int,
-    n_per_score: int,
-) -> tuple[state.Throws, state.SheetStates]:
-    if n_random_throws < 0:
-        raise ValueError(f"n_random_throws must be >= 0, got {n_random_throws}")
-    if n_per_score < 0:
-        raise ValueError(f"n_per_score must be >= 0, got {n_per_score}")
-    if n_random_throws == 0 and n_per_score == 0:
-        raise ValueError("need n_random_throws > 0 and/or n_per_score > 0")
-
-    parts: list[tuple[state.Throws, state.SheetStates]] = []
-    if n_random_throws > 0:
-        parts.append(
-            RandomThrows(
-                rng=rng, n_throws_to_generate=n_random_throws
-            ).get_throws_for_num_sims(team=team, sheet_states=sheet_states)
-        )
-    if n_per_score > 0:
-        parts.append(
-            sample_throws_by_score_for_sheets(
-                sheet_states=sheet_states,
-                team=team,
-                throw_searcher=ThrowsGridSearcher(10, 10, 4),
-                n_per_score=n_per_score,
-                rng=rng,
-            )
-        )
-    return combine_throw_datasets(*parts)
 
 
 # 8×8×4×3 grid candidates + 36×4×3 random candidates = 1200 candidates per
@@ -385,37 +185,6 @@ def _grid_search_throws(
     return state.concat_throws(parts)
 
 
-def q_network_training_data(
-    *,
-    sheet_states: state.SheetStates,
-    team: int,
-    rng: np.random.Generator,
-    n_random_throws: int,
-    n_per_score: int,
-    num_stones_per_side: int | None = None,
-) -> TrainingData:
-    """Build a Q-network score-match dataset from random and/or score-stratified throws."""
-    throws, states = _sampled_throws_and_states(
-        sheet_states=sheet_states,
-        team=team,
-        rng=rng,
-        n_random_throws=n_random_throws,
-        n_per_score=n_per_score,
-    )
-    final_states = cached_physics.run_until_stopping(
-        sheet_states=state.add_stones_from_throws(states, throws)
-    )
-    final_scores = scoring.get_net_score_for_team(final_states, 0)
-    stones_per_side = (
-        (sheet_states.x.shape[1] + 1) // 2
-        if num_stones_per_side is None
-        else num_stones_per_side
-    )
-    return curling_nn.QInputFeatures.create_score_match_dataset_from_sheet_states(
-        states, throws, final_scores, stones_per_side
-    )
-
-
 def value_network_training_data(
     *,
     sheet_states: state.SheetStates,
@@ -444,6 +213,6 @@ def value_network_training_data(
         if num_stones_per_side is None
         else num_stones_per_side
     )
-    return curling_nn.VInputFeatures.create_score_match_dataset_from_sheet_states(
-        sheet_states, final_scores, stones_per_side
+    return curling_nn.ValueInputFeatures.create_score_match_dataset_from_sheet_states(
+        sheet_states, final_scores, stones_per_side, 2 * stones_per_side
     )
