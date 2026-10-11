@@ -2,6 +2,8 @@
 
 `checkpoints/m_1.npz` through `checkpoints/m_10.npz` are the checkpoints from the 10-iteration `round9_2k_v2` run. Each NPZ contains the value-network weights and feature normalizer. The category-level `schema.json` documents every saved array.
 
+`final_model.npz` is a relative symlink to `checkpoints/m_10.npz`, the final checkpoint.
+
 Load it with the sequential-training helper:
 
 ```python
