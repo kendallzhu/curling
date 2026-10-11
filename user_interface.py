@@ -25,7 +25,7 @@ from state import (
     empty_board,
     add_new_stone,
 )
-from bot import perturb_throw
+from bot import DEFAULT_THROW_PERTURBATIONS, perturb_throw
 
 PANEL_H = 80  # pixels of control panel below the sheet
 SLIDER_BAR_HEIGHT = 10
@@ -57,6 +57,8 @@ class UIState:
     dragging_y: bool = False
     bot_throw: Throw | None = None
     bot_throw_v: Throw | None = None
+    last_perturbation_offset_deg: float | None = None
+    last_perturbation_probability: float | None = None
 
     def to_next_throw(self, team: int) -> Throw:
         return Throw(
@@ -147,7 +149,12 @@ def render_sheet(surface: pygame.Surface, state: SheetState) -> None:
     draw_half(SHEET_W_M / 2, half_h)
 
 
-def render_add_stone_preview(surface, throw: Throw):
+def render_add_stone_preview(
+    surface,
+    throw: Throw,
+    perturbation_offset_deg: float | None = None,
+    perturbation_probability: float | None = None,
+):
     color = TEAM_0_COLOR if throw.team == 0 else TEAM_1_COLOR
     sw, sh = surface.get_size()
     half_h = sh // 2
@@ -182,6 +189,23 @@ def render_add_stone_preview(surface, throw: Throw):
     right_y = back_y - perp_y
     pygame.draw.line(surface, color, (end_x, end_y), (left_x, left_y), 3)
     pygame.draw.line(surface, color, (end_x, end_y), (right_x, right_y), 3)
+
+    if perturbation_probability is not None:
+        if perturbation_offset_deg == 0.0:
+            label = f"No perturbation ({perturbation_probability:.0%})"
+        else:
+            label = (
+                f"Perturbed {perturbation_offset_deg:+.1f}° "
+                f"({perturbation_probability:.0%})"
+            )
+        label_font = pygame.font.SysFont(None, 22)
+        label_surface = label_font.render(label, True, (245, 245, 245))
+        label_rect = label_surface.get_rect(midleft=(end_x + 10, end_y))
+        label_rect.clamp_ip(surface.get_rect())
+        pygame.draw.rect(
+            surface, (40, 40, 40), label_rect.inflate(8, 6), border_radius=3
+        )
+        surface.blit(label_surface, label_rect)
 
     # Curl indicator
     if throw.turn != 0:
@@ -390,7 +414,12 @@ def render_ui(
     surface, ui_state: UIState, score, next_team: int, hammer_team=None, stones_left=None
 ):
     throw = ui_state.to_next_throw(next_team)
-    render_add_stone_preview(surface, throw)
+    render_add_stone_preview(
+        surface,
+        throw,
+        ui_state.last_perturbation_offset_deg,
+        ui_state.last_perturbation_probability,
+    )
     render_preset_buttons(surface)
     return draw_panel(
         surface,
@@ -406,18 +435,29 @@ def render_ui(
     )
 
 
-def _apply_suggested_throw(ui_state: UIState, sheet_states, throw: Throw):
+def _apply_throw(ui_state: UIState, sheet_states, throw: Throw, *, update_controls=False):
     released_throw = perturb_throw(throw)
+    angle_offset = released_throw.angle_deg - throw.angle_deg
+    ui_state.last_perturbation_offset_deg = angle_offset
+    ui_state.last_perturbation_probability = next(
+        probability
+        for configured_offset, probability in zip(
+            DEFAULT_THROW_PERTURBATIONS.angle_offsets_deg,
+            DEFAULT_THROW_PERTURBATIONS.probabilities,
+        )
+        if np.isclose(angle_offset, configured_offset)
+    )
     if released_throw.angle_deg != throw.angle_deg:
         print(
-            "*** BOT THROW PERTURBED *** "
-            f"angle offset {released_throw.angle_deg - throw.angle_deg:+.3f} deg"
+            "*** THROW PERTURBED *** "
+            f"angle offset {angle_offset:+.3f} deg"
         )
     next_sheet_states = add_new_stone(sheet_states, released_throw)
-    ui_state.angle_val = released_throw.angle_deg
-    ui_state.speed_val = released_throw.speed
-    ui_state.y_val = released_throw.y_val
-    ui_state.turn_val = released_throw.turn
+    if update_controls:
+        ui_state.angle_val = released_throw.angle_deg
+        ui_state.speed_val = released_throw.speed
+        ui_state.y_val = released_throw.y_val
+        ui_state.turn_val = released_throw.turn
     return next_sheet_states
 
 
@@ -471,16 +511,16 @@ def handle_mouse_input(
                 y_val=ui_state.y_val,
                 team=next_team_to_play,
             )
-            next_sheet_states = add_new_stone(next_sheet_states, perturb_throw(throw))
+            next_sheet_states = _apply_throw(ui_state, next_sheet_states, throw)
         elif bot_btn_rect.collidepoint(mx, my) and ui_state.bot_throw:
             if not current_sheet_states.is_any_stone_moving():
-                next_sheet_states = _apply_suggested_throw(
-                    ui_state, next_sheet_states, ui_state.bot_throw
+                next_sheet_states = _apply_throw(
+                    ui_state, next_sheet_states, ui_state.bot_throw, update_controls=True
                 )
         elif bot_v_btn_rect.collidepoint(mx, my) and ui_state.bot_throw_v:
             if not current_sheet_states.is_any_stone_moving():
-                next_sheet_states = _apply_suggested_throw(
-                    ui_state, next_sheet_states, ui_state.bot_throw_v
+                next_sheet_states = _apply_throw(
+                    ui_state, next_sheet_states, ui_state.bot_throw_v, update_controls=True
                 )
         elif empty_rect.collidepoint(mx, my):
             # Clear sheet
