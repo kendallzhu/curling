@@ -24,6 +24,8 @@ _TWO_R = 2.0 * _R_NB
 _TWO_R_SEP = _TWO_R * 1.01  # push stones apart to this distance
 _4R2_NB = float(_4R2)
 _MU_G_NB = float(_mu_g)
+_COLLISION_APPROACH_THRESHOLD_S = 1e-6
+_COLLISION_APPROACH_FRACTION = 0.9
 
 
 # ── JIT kernel 1: separate overlapping stones ────────────────────────────────
@@ -233,8 +235,21 @@ def run_to_next_collision_or_stop(
         first_collision_index = np.zeros(num_sims, dtype=np.intp)
         second_collision_index = np.zeros(num_sims, dtype=np.intp)
 
-    next_event_is_collision = next_collision_time <= np.fmin(
-        next_stop_time, max_frame_time
+    # Re-evaluate the approximate collision prediction as the stones approach.
+    # An approach step is not itself a collision: use the full prediction only
+    # once the remaining estimate is within the approach threshold.
+    unadjusted_collision_time = next_collision_time
+    collision_time_is_due = (
+        unadjusted_collision_time <= _COLLISION_APPROACH_THRESHOLD_S
+    )
+    next_collision_time = np.where(
+        collision_time_is_due,
+        unadjusted_collision_time,
+        _COLLISION_APPROACH_FRACTION * unadjusted_collision_time,
+    )
+
+    next_event_is_collision = collision_time_is_due & (
+        unadjusted_collision_time <= np.fmin(next_stop_time, max_frame_time)
     )
     time_to_next_event = np.fmin(
         next_collision_time, np.fmin(next_stop_time, max_frame_time)

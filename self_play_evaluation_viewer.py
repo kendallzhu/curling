@@ -15,8 +15,7 @@ from state import add_new_stone
 from user_interface import render_sheet
 
 
-LARGE_CHECKPOINT = Path("weights/self_play/round9_20k/checkpoints/m_30.npz")
-DEFAULT_MODEL_VERSION = "round9_2k_v2"
+DEFAULT_EVALUATION_ARCHIVE = Path("stats/self_play_evaluation_games.npz")
 GROUPS = (
     ("model_turn_7", "Model played turn 7", (7,)),
     ("model_turn_9", "Model played turn 9", (9,)),
@@ -36,41 +35,16 @@ def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Replay games from the paired self-play evaluation."
     )
-    parser.add_argument("--num-states", type=int, default=200)
-    parser.add_argument("--seed", type=int, default=2026)
-    parser.add_argument("--grid-size", type=int, nargs=3, default=(10, 10, 4))
-    parser.add_argument("--max-stones", type=int, default=10)
-    parser.add_argument("--large-checkpoint", type=Path, default=LARGE_CHECKPOINT)
     parser.add_argument(
-        "--model-version",
-        default=DEFAULT_MODEL_VERSION,
-        help="Self-play run name; by default the viewer uses its latest checkpoint.",
-    )
-    parser.add_argument(
-        "--small-checkpoint",
+        "--evaluation-archive",
         type=Path,
-        help="Optional checkpoint path override for --model-version.",
+        default=DEFAULT_EVALUATION_ARCHIVE,
+        help="NPZ written by self_play_evaluation.ipynb.",
     )
     parser.add_argument(
         "--small-window", action="store_true", help="Use a smaller starting window."
     )
     return parser.parse_args()
-
-
-def _latest_checkpoint(model_version: str) -> Path:
-    checkpoint_dir = Path("weights/self_play") / model_version / "checkpoints"
-    checkpoints = []
-    for path in checkpoint_dir.glob("m_*.npz"):
-        try:
-            checkpoint_index = int(path.stem.removeprefix("m_"))
-        except ValueError:
-            continue
-        checkpoints.append((checkpoint_index, path))
-    if not checkpoints:
-        raise FileNotFoundError(
-            f"No model checkpoints found for {model_version}: {checkpoint_dir}"
-        )
-    return max(checkpoints)[1]
 
 
 def _button(surface, rect, label, font, *, active=False):
@@ -113,7 +87,7 @@ def _summary_stats(record):
     }
 
 
-def _run_viewer(records, *, run_names: tuple[str, str], small_window: bool) -> None:
+def _run_viewer(records, *, run_names: tuple[str, ...], small_window: bool) -> None:
     pygame.init()
     window_w, window_h = (1400, 760) if small_window else (1880, 1000)
     screen = pygame.display.set_mode((window_w, window_h), pygame.RESIZABLE)
@@ -402,24 +376,26 @@ def _run_viewer(records, *, run_names: tuple[str, str], small_window: bool) -> N
 
 def main() -> None:
     args = _parse_args()
-    small_checkpoint = args.small_checkpoint or _latest_checkpoint(args.model_version)
-    run_names = ("large_m30", args.model_version)
-    checkpoint_paths = {
-        run_names[0]: args.large_checkpoint,
-        run_names[1]: small_checkpoint,
-    }
-    for path in checkpoint_paths.values():
-        if not path.is_file():
-            raise FileNotFoundError(f"Checkpoint does not exist: {path}")
-
-    print("Recomputing the seeded paired evaluation and retaining game throws...")
-    records = self_play_training.evaluate_checkpoints_against_greedy_with_games(
-        checkpoint_paths=checkpoint_paths,
-        num_states=args.num_states,
-        seed=args.seed,
-        grid_size=tuple(args.grid_size),
-        max_stones=args.max_stones,
-    )
+    if not args.evaluation_archive.is_file():
+        raise FileNotFoundError(
+            f"Evaluation archive not found: {args.evaluation_archive}. "
+            "Run the paired evaluation cell in self_play_evaluation.ipynb first."
+        )
+    records = self_play_training.load_evaluation_games(args.evaluation_archive)
+    if not records:
+        raise ValueError(f"Evaluation archive contains no games: {args.evaluation_archive}")
+    run_names = tuple(dict.fromkeys(record["run"] for record in records))
+    expected_groups = {group[0] for group in GROUPS}
+    for run_name in run_names:
+        available_groups = {
+            record["group"] for record in records if record["run"] == run_name
+        }
+        missing_groups = expected_groups - available_groups
+        if missing_groups:
+            raise ValueError(
+                f"Evaluation archive is missing groups for {run_name}: "
+                f"{', '.join(sorted(missing_groups))}"
+            )
     print(f"Ready to replay {sum(len(record['games']) for record in records)} games.")
     _run_viewer(records, run_names=run_names, small_window=args.small_window)
 

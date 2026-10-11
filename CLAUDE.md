@@ -47,7 +47,8 @@ Vectorized curling simulation with Numba physics, actual scoring, grid-search an
 - `training.ipynb` – Legacy notebook; its Q workflow and pre-self-play value features are no longer supported.
 - `sequential_training.py` – Reusable sequential score-model training, evaluation, and checkpoint IO.
 - `self_play_training.py` – Reusable self-play rollout and training code, driven with the initial sequential stage by `self_play_training.ipynb`.
-- `self_play_evaluation.ipynb` – Plots committed self-play training metrics and runs a quick paired comparison of selected checkpoints against greedy play; outputs go under each run's `stats/` directory.
+- `self_play_evaluation.ipynb` – Plots committed self-play training metrics and runs a paired comparison of selected checkpoints against greedy play; summaries go under each run's `stats/` directory and replay data goes to `stats/self_play_evaluation_games.npz`.
+- `self_play_evaluation_viewer.py` – Replays games from the paired self-play evaluation archive.
 - `weights/` – Saved model checkpoints. New sequential-training and self-play checkpoints live in `weights/<category>/<run>/checkpoints/`, with run records in `stats/`; each category has a `schema.json` describing every NPZ array. Archived legacy weights are kept under `weights/old/`.
 - `datasets/` – Checked-in value-network shards. Loading concatenates `raw_inputs` and refits the normalizer.
 - `scratch/nn_scratch_old.ipynb` – Older neural-network scratch notebook.

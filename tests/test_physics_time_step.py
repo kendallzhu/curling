@@ -3,6 +3,7 @@
 import copy
 
 import numpy as np
+from inline_snapshot import snapshot
 
 import physics_numba
 from bot import RandomThrows
@@ -21,15 +22,17 @@ def _final_stones(states, throws, max_frame_time):
     return final.x, final.y
 
 
-def _report(dist):
-    n = dist.shape[0]
-    lines = [f"{n} throws, max_frame_time={DEMO_MAX_FRAME_TIME}"]
-    for threshold in [1e-6, 1e-4, 1e-3, 1e-2, 1e-1]:
-        count = int(np.sum(dist > threshold))
-        lines.append(f"dist > {threshold:g}: {count}")
-    for q in [90, 99, 100]:
-        lines.append(f"p{q} dist: {np.percentile(dist, q):.2e}")
-    return "\n".join(lines)
+def _summary(dist):
+    return {
+        "num_throws": int(dist.size),
+        "distance_counts": {
+            f"greater_than_{threshold:g}": int(np.sum(dist > threshold))
+            for threshold in [1e-6, 1e-4, 1e-3, 1e-2, 1e-1]
+        },
+        "percentile_distances": {
+            f"p{q}": f"{np.percentile(dist, q):.2e}" for q in [90, 99, 100]
+        },
+    }
 
 
 def test_time_step_limit_matches_unlimited_on_empty_board():
@@ -41,9 +44,26 @@ def test_time_step_limit_matches_unlimited_on_empty_board():
     x_dt, y_dt = _final_stones(states, throws, DEMO_MAX_FRAME_TIME)
     dist = np.hypot(x_inf - x_dt, y_inf - y_dt).max(axis=1)
 
-    print(_report(dist))
     assert np.all(np.isfinite(dist))
     assert dist.max() < 1e-6
+    # Regenerate with: venv/bin/python -m pytest --inline-snapshot=fix tests/test_physics_time_step.py
+    assert _summary(dist) == snapshot(
+        {
+            "num_throws": 2000,
+            "distance_counts": {
+                "greater_than_1e-06": 0,
+                "greater_than_0.0001": 0,
+                "greater_than_0.001": 0,
+                "greater_than_0.01": 0,
+                "greater_than_0.1": 0,
+            },
+            "percentile_distances": {
+                "p90": '5.69e-14',
+                "p99": '1.07e-13',
+                "p100": '3.62e-13',
+            },
+        }
+    )
 
 
 def test_time_step_limit_vs_unlimited_with_collisions():
@@ -56,14 +76,20 @@ def test_time_step_limit_vs_unlimited_with_collisions():
     # Worst displacement over all stones on each board.
     dist = np.hypot(x_inf - x_dt, y_inf - y_dt).max(axis=1)
 
-# TODO: stronger assert when fixed
-    assert _report(dist) == """\
-2000 throws, max_frame_time=0.15
-dist > 1e-06: 788
-dist > 0.0001: 745
-dist > 0.001: 550
-dist > 0.01: 197
-dist > 0.1: 25
-p90 dist: 9.87e-03
-p99 dist: 1.29e-01
-p100 dist: 2.26e+00"""
+    assert _summary(dist) == snapshot(
+        {
+            "num_throws": 2000,
+            "distance_counts": {
+                "greater_than_1e-06": 14,
+                "greater_than_0.0001": 0,
+                "greater_than_0.001": 0,
+                "greater_than_0.01": 0,
+                "greater_than_0.1": 0,
+            },
+            "percentile_distances": {
+                "p90": '6.39e-08',
+                "p99": '7.69e-07',
+                "p100": '1.23e-05',
+            },
+        }
+    )

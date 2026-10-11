@@ -15,6 +15,8 @@ from state import SheetStates, Velocities, SheetHistories, VelocityHistories
 R = STONE_RADIUS_M
 r = STONE_INNER_RING_RADIUS_M
 r_p = (R * R / 2 + r * r) ** 0.5
+_COLLISION_APPROACH_THRESHOLD_S = 1e-6
+_COLLISION_APPROACH_FRACTION = 0.9
 
 
 def smaller_positive_real_quadratic_solution_or_inf(*, a, b, c):
@@ -185,8 +187,20 @@ def run_to_next_collision_or_stop(
             )
             next_collision_time = np.fmin(next_collision_time, time_to_collision)
             # print(i, j, next_collision_time)
-    next_event_is_collision = next_collision_time <= np.fmin(
-        next_stop_time, max_frame_time
+    # Re-evaluate the approximate collision prediction as the stones approach.
+    # An approach step is not itself a collision: use the full prediction only
+    # once the remaining estimate is within the approach threshold.
+    unadjusted_collision_time = next_collision_time
+    collision_time_is_due = (
+        unadjusted_collision_time <= _COLLISION_APPROACH_THRESHOLD_S
+    )
+    next_collision_time = np.where(
+        collision_time_is_due,
+        unadjusted_collision_time,
+        _COLLISION_APPROACH_FRACTION * unadjusted_collision_time,
+    )
+    next_event_is_collision = collision_time_is_due & (
+        unadjusted_collision_time <= np.fmin(next_stop_time, max_frame_time)
     )
     time_to_next_event = np.fmin(
         next_collision_time, np.fmin(next_stop_time, max_frame_time)

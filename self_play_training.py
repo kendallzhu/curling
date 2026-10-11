@@ -639,6 +639,162 @@ def evaluate_checkpoints_against_greedy_with_games(
     return records
 
 
+def summarize_evaluation_games(
+    records: list[dict[str, object]],
+) -> list[dict[str, float | int | str]]:
+    """Summarize the per-game records returned by the paired replay evaluation."""
+    summaries = []
+    for record in records:
+        games = record["games"]
+        model_scores = np.asarray([game["model_score"] for game in games], dtype=float)
+        greedy_scores = np.asarray([game["greedy_score"] for game in games], dtype=float)
+        differences = model_scores - greedy_scores
+        standard_error = float(np.std(differences, ddof=1) / np.sqrt(differences.size))
+        average_advantage = float(np.mean(differences))
+        summaries.append({
+            "run": record["run"],
+            "group": record["group"],
+            "model_team": record["model_team"],
+            "num_states": int(differences.size),
+            "average_model_score": float(np.mean(model_scores)),
+            "average_greedy_score": float(np.mean(greedy_scores)),
+            "average_advantage": average_advantage,
+            "advantage_standard_error": standard_error,
+            "advantage_ci95_low": average_advantage - 1.96 * standard_error,
+            "advantage_ci95_high": average_advantage + 1.96 * standard_error,
+            "win_rate": float(np.mean(differences > 0)),
+            "tie_rate": float(np.mean(differences == 0)),
+            "loss_rate": float(np.mean(differences < 0)),
+        })
+    return summaries
+
+
+def save_evaluation_games(
+    path: str | Path,
+    records: list[dict[str, object]],
+    *,
+    parameters: dict[str, object],
+) -> None:
+    """Save replay records as a compressed, pickle-free NPZ archive."""
+    archive: dict[str, np.ndarray] = {}
+    record_metadata = []
+    for record_index, record in enumerate(records):
+        games = record["games"]
+        prefix = f"record_{record_index}_"
+        record_metadata.append({
+            "run": record["run"],
+            "group": record["group"],
+            "model_team": record["model_team"],
+            "model_turns": list(record["model_turns"]),
+            "prefix": prefix,
+            "num_games": len(games),
+        })
+
+        initial_states = [game["initial_state"] for game in games]
+        archive[prefix + "first_team"] = np.concatenate(
+            [states.first_team for states in initial_states]
+        )
+        for key, get_array in (
+            ("x", lambda states: states.x),
+            ("y", lambda states: states.y),
+            ("velocity_v", lambda states: states.velocities.v),
+            ("velocity_theta", lambda states: states.velocities.theta),
+            ("rotation_directions", lambda states: states.rotation_directions),
+        ):
+            archive[prefix + key] = np.concatenate(
+                [get_array(states) for states in initial_states]
+            )
+
+        archive[prefix + "model_score"] = np.asarray(
+            [game["model_score"] for game in games], dtype=float
+        )
+        archive[prefix + "greedy_score"] = np.asarray(
+            [game["greedy_score"] for game in games], dtype=float
+        )
+        for policy_key in ("model_throws", "greedy_throws"):
+            throws = [game[policy_key] for game in games]
+            for field in ("angle_deg", "speed", "turn", "y_val", "team"):
+                archive[prefix + policy_key + "_" + field] = np.asarray(
+                    [[getattr(throw, field) for throw in game_throws] for game_throws in throws]
+                )
+
+    metadata = {
+        "schema_version": 1,
+        "parameters": parameters,
+        "records": record_metadata,
+    }
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    np.savez_compressed(path, metadata_json=np.asarray(json.dumps(metadata)), **archive)
+
+
+def load_evaluation_games(path: str | Path) -> list[dict[str, object]]:
+    """Load replay records saved by :func:`save_evaluation_games`."""
+    with np.load(path, allow_pickle=False) as data:
+        metadata = json.loads(str(data["metadata_json"].item()))
+        if metadata.get("schema_version") != 1:
+            raise ValueError(f"Unsupported self-play evaluation archive: {path}")
+        records = []
+        for record_meta in metadata["records"]:
+            prefix = record_meta["prefix"]
+            count = record_meta["num_games"]
+            arrays = {
+                key: np.array(data[prefix + key], copy=True)
+                for key in (
+                    "first_team", "x", "y", "velocity_v", "velocity_theta",
+                    "rotation_directions", "model_score", "greedy_score",
+                )
+            }
+
+            throw_fields = {
+                policy_key: {
+                    name: np.array(data[prefix + policy_key + "_" + name], copy=True)
+                    for name in ("angle_deg", "speed", "turn", "y_val", "team")
+                }
+                for policy_key in ("model_throws", "greedy_throws")
+            }
+
+            def load_throws(policy_key: str, game_index: int) -> list[state.Throw]:
+                fields = throw_fields[policy_key]
+                return [
+                    state.Throw(
+                        angle_deg=float(fields["angle_deg"][game_index, throw_index]),
+                        speed=float(fields["speed"][game_index, throw_index]),
+                        turn=int(fields["turn"][game_index, throw_index]),
+                        y_val=float(fields["y_val"][game_index, throw_index]),
+                        team=int(fields["team"][game_index, throw_index]),
+                    )
+                    for throw_index in range(fields["turn"].shape[1])
+                ]
+
+            games = []
+            for game_index in range(count):
+                games.append({
+                    "initial_state": state.SheetStates(
+                        first_team=arrays["first_team"][game_index : game_index + 1],
+                        x=arrays["x"][game_index : game_index + 1],
+                        y=arrays["y"][game_index : game_index + 1],
+                        velocities=state.Velocities(
+                            v=arrays["velocity_v"][game_index : game_index + 1],
+                            theta=arrays["velocity_theta"][game_index : game_index + 1],
+                        ),
+                        rotation_directions=arrays["rotation_directions"][game_index : game_index + 1],
+                    ),
+                    "model_throws": load_throws("model_throws", game_index),
+                    "greedy_throws": load_throws("greedy_throws", game_index),
+                    "model_score": float(arrays["model_score"][game_index]),
+                    "greedy_score": float(arrays["greedy_score"][game_index]),
+                })
+            records.append({
+                "run": record_meta["run"],
+                "group": record_meta["group"],
+                "model_team": record_meta["model_team"],
+                "model_turns": tuple(record_meta["model_turns"]),
+                "games": games,
+            })
+    return records
+
+
 def evaluate_checkpoints(
     *,
     checkpoint_dir: str | Path,
