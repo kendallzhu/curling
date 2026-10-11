@@ -10,6 +10,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass
 import json
 from pathlib import Path
+import shutil
 
 import numpy as np
 
@@ -45,6 +46,27 @@ class SelfPlayConfig:
         if self.halflife <= 0:
             raise ValueError("halflife must be positive")
         return 2.0 ** (-1.0 / self.halflife)
+
+
+def _copy_initial_training_stats(
+    initial_model_path: str | Path, weights_dir: Path
+) -> Path | None:
+    """Copy the initial sequential checkpoint's evaluation record into this run."""
+    checkpoint_path = Path(initial_model_path).resolve()
+    if checkpoint_path.parent.name != "checkpoints":
+        return None
+    source_path = (
+        checkpoint_path.parent.parent
+        / "stats"
+        / f"{checkpoint_path.stem}_evaluation.json"
+    )
+    if not source_path.is_file():
+        return None
+    destination_dir = weights_dir / "stats" / "initial_sequential_training"
+    destination_dir.mkdir(parents=True, exist_ok=True)
+    destination_path = destination_dir / source_path.name
+    shutil.copy2(source_path, destination_path)
+    return destination_path
 
 
 def _pad_states(sheet_states: state.SheetStates, max_stones: int) -> state.SheetStates:
@@ -280,6 +302,11 @@ def run_self_play(
     saved_iterations: dict[str, dict[str, object]] = {}
     saved_checkpoint_metrics: dict[str, dict[str, object]] = {}
     if weights_dir is not None:
+        stats_dir = weights_dir / "stats"
+        stats_dir.mkdir(parents=True, exist_ok=True)
+        initial_training_stats_path = _copy_initial_training_stats(
+            initial_model_path, weights_dir
+        )
         repo_root = Path(seq.__file__).resolve().parent
 
         def input_label(path: str | Path) -> str:
@@ -330,9 +357,11 @@ def run_self_play(
             },
             "initial_model": input_label(initial_model_path),
             "initial_dataset": input_label(initial_dataset_path),
+            "initial_training_stats": (
+                initial_training_stats_path.relative_to(weights_dir).as_posix()
+                if initial_training_stats_path is not None else None
+            ),
         })
-        stats_dir = weights_dir / "stats"
-        stats_dir.mkdir(parents=True, exist_ok=True)
         stats_path = stats_dir / "training_stats.json"
         legacy_eval_stats_dir = weights_dir / "eval_stats"
         legacy_root_stats_path = weights_dir / "training_stats.json"
@@ -496,8 +525,34 @@ def _evaluate_policy_group(
     max_stones: int,
 ) -> np.ndarray:
     """Roll out one half of the paired evaluation from fixed initial states."""
+    scores, _ = _rollout_policy_group(
+        initial_states,
+        model,
+        normalizer,
+        model_turns=model_turns,
+        model_team=model_team,
+        grid_size=grid_size,
+        max_stones=max_stones,
+        record_throws=False,
+    )
+    return scores
+
+
+def _rollout_policy_group(
+    initial_states: state.SheetStates,
+    model,
+    normalizer: dataset.Normalizer,
+    *,
+    model_turns: frozenset[int],
+    model_team: int,
+    grid_size: tuple[int, int, int],
+    max_stones: int,
+    record_throws: bool,
+) -> tuple[np.ndarray, list[list[state.Throw]] | None]:
+    """Roll out a policy group and optionally retain each game's throws."""
     current = initial_states
     searcher = ThrowsGridSearcher(*grid_size)
+    throw_history = [[] for _ in range(initial_states.x.shape[0])] if record_throws else None
     for turn in range(7, 11):
         if turn in model_turns:
             throws = _greedy_model_throw(
@@ -505,10 +560,102 @@ def _evaluate_policy_group(
             )
         else:
             throws = _greedy_grid_throw(current, searcher)
+        if throw_history is not None:
+            for game_index in range(len(throw_history)):
+                throw_history[game_index].append(throws.get_throw(game_index))
         current = seq.cached_physics.run_until_stopping(
             sheet_states=current, throws=throws
         )
-    return scoring.get_net_score_for_team(current, model_team)
+    return scoring.get_net_score_for_team(current, model_team), throw_history
+
+
+def evaluate_checkpoints_against_greedy_with_games(
+    *,
+    checkpoint_paths: dict[str, str | Path],
+    num_states: int = 200,
+    seed: int = 2026,
+    grid_size: tuple[int, int, int] = (10, 10, 4),
+    max_stones: int = 10,
+    states: state.SheetStates | None = None,
+) -> list[dict[str, object]]:
+    """Return paired game states, throws, and scores for interactive replay.
+
+    The same seeded states and policy rollouts as
+    :func:`evaluate_checkpoints_against_greedy` are used. Each result contains
+    one 100-game group (or ``num_states // 2`` games for custom sizes).
+    """
+    if not checkpoint_paths:
+        raise ValueError("checkpoint_paths must not be empty")
+    if num_states < 2 or num_states % 2:
+        raise ValueError("num_states must be a positive even number")
+    if states is None:
+        states = seq.data_generation.generate_random_sheet_state_for_turn(
+            turn=6, num_sims=num_states, rng=np.random.default_rng(seed)
+        )
+    if states.x.shape[0] != num_states:
+        raise ValueError("states must contain num_states rows")
+
+    midpoint = num_states // 2
+    first_half = state.take_sheet_states(states, np.arange(midpoint))
+    second_half = state.take_sheet_states(states, np.arange(midpoint, num_states))
+    groups = (
+        ("model_turn_7", frozenset((7,)), 0, first_half),
+        ("model_turn_9", frozenset((9,)), 0, first_half),
+        ("model_turn_8", frozenset((8,)), 1, second_half),
+    )
+
+    greedy_results = {}
+    for group_name, model_team, group_states in (
+        ("model_turns_7_9", 0, first_half),
+        ("model_turn_8", 1, second_half),
+    ):
+        scores, throws = _rollout_policy_group(
+            group_states,
+            model=None,
+            normalizer=None,
+            model_turns=frozenset(),
+            model_team=model_team,
+            grid_size=grid_size,
+            max_stones=max_stones,
+            record_throws=True,
+        )
+        greedy_results[group_name] = (scores, throws)
+
+    records: list[dict[str, object]] = []
+    for run_name, checkpoint_path in checkpoint_paths.items():
+        model, normalizer = seq.load_model(checkpoint_path)
+        for group_name, model_turns, model_team, group_states in groups:
+            model_scores, model_throws = _rollout_policy_group(
+                group_states,
+                model,
+                normalizer,
+                model_turns=model_turns,
+                model_team=model_team,
+                grid_size=grid_size,
+                max_stones=max_stones,
+                record_throws=True,
+            )
+            baseline_name = "model_turns_7_9" if model_team == 0 else "model_turn_8"
+            greedy_scores, greedy_throws = greedy_results[baseline_name]
+            records.append({
+                "run": run_name,
+                "group": group_name,
+                "model_team": model_team,
+                "model_turns": tuple(sorted(model_turns)),
+                "games": [
+                    {
+                        "initial_state": state.take_sheet_states(
+                            group_states, np.array([game_index])
+                        ),
+                        "model_throws": model_throws[game_index],
+                        "greedy_throws": greedy_throws[game_index],
+                        "model_score": float(model_scores[game_index]),
+                        "greedy_score": float(greedy_scores[game_index]),
+                    }
+                    for game_index in range(len(model_scores))
+                ],
+            })
+    return records
 
 
 def evaluate_checkpoints(

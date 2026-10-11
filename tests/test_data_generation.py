@@ -75,6 +75,27 @@ def test_generate_random_sheet_state_for_turn_same_seed_is_reproducible():
         np.testing.assert_array_equal(a.y, b.y)
 
 
+def test_turn_state_batch_matches_independent_histories():
+    turn = 6
+    num_sims = 64
+    batched = generate_random_sheet_state_for_turn(
+        turn=turn, num_sims=num_sims, rng=np.random.default_rng(2026)
+    )
+    rng = np.random.default_rng(2026)
+    separate = [
+        generate_random_sheet_state_for_turn(turn=turn, rng=rng)
+        for _ in range(num_sims)
+    ]
+
+    np.testing.assert_array_equal(
+        batched.x, np.concatenate([sim.x for sim in separate], axis=0)
+    )
+    np.testing.assert_array_equal(
+        batched.y, np.concatenate([sim.y for sim in separate], axis=0)
+    )
+    assert np.unique(batched.x != 0, axis=0).shape[0] > 1
+
+
 def test_generate_random_sheet_state_for_turn_in_play_count_snapshot():
     # Regenerate with: venv/bin/python -m pytest --inline-snapshot=fix <this file>
     rng = np.random.default_rng(123)

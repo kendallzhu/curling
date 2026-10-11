@@ -1,7 +1,6 @@
 {
   "run": "large_m30",
   "checkpoint": "m_30.npz",
-  "checkpoint_path": "checkpoints/m_30.npz",
   "parameters": {
     "num_states": 200,
     "seed": 2026,
@@ -12,7 +11,7 @@
     ],
     "max_stones": 10
   },
-  "elapsed_seconds_for_all_runs": 12.108658125999682,
+  "elapsed_seconds_for_all_runs": 12.420108637999874,
   "results": [
     {
       "run": "large_m30",

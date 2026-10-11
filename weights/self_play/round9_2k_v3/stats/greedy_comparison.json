@@ -1,0 +1,62 @@
+{
+  "run": "v3",
+  "checkpoint": "m_10.npz",
+  "parameters": {
+    "num_states": 200,
+    "seed": 2026,
+    "grid_size": [
+      10,
+      10,
+      4
+    ],
+    "max_stones": 10
+  },
+  "elapsed_seconds_for_all_runs": 27.26641189899965,
+  "results": [
+    {
+      "run": "v3",
+      "group": "model_turn_7",
+      "model_team": 0,
+      "num_states": 100,
+      "average_model_score": -1.29,
+      "average_greedy_score": -1.72,
+      "average_advantage": 0.43,
+      "advantage_standard_error": 0.10075974023649152,
+      "advantage_ci95_low": 0.23251090913647662,
+      "advantage_ci95_high": 0.6274890908635233,
+      "win_rate": 0.41,
+      "tie_rate": 0.41,
+      "loss_rate": 0.18
+    },
+    {
+      "run": "v3",
+      "group": "model_turn_9",
+      "model_team": 0,
+      "num_states": 100,
+      "average_model_score": -1.14,
+      "average_greedy_score": -1.72,
+      "average_advantage": 0.58,
+      "advantage_standard_error": 0.07936617603859907,
+      "advantage_ci95_low": 0.4244422949643458,
+      "advantage_ci95_high": 0.7355577050356541,
+      "win_rate": 0.43,
+      "tie_rate": 0.55,
+      "loss_rate": 0.02
+    },
+    {
+      "run": "v3",
+      "group": "model_turn_8",
+      "model_team": 1,
+      "num_states": 100,
+      "average_model_score": 2.1,
+      "average_greedy_score": 1.65,
+      "average_advantage": 0.45,
+      "advantage_standard_error": 0.08572330399888264,
+      "advantage_ci95_low": 0.28198232416219005,
+      "advantage_ci95_high": 0.61801767583781,
+      "win_rate": 0.38,
+      "tie_rate": 0.55,
+      "loss_rate": 0.07
+    }
+  ]
+}

@@ -78,6 +78,10 @@ Searchers return throws and tiled states in candidate-major/state-minor order. F
 
 Robustness ranks the top 5% of exact-score candidates using fixed release-angle offsets: 0.0 degrees (50%), -0.1 degrees (25%), and +0.1 degrees (25%).
 
+### Generated JSON files
+
+When writing JSON artifacts, append a final newline (for example, `json.dumps(payload, indent=2) + "\n"`). The `end-of-file-fixer` pre-commit hook requires it; notebook and script writers should follow this convention so generated files such as `stats/greedy_comparison.json` do not need a manual cleanup before commit.
+
 ## Common commands
 
 ```bash

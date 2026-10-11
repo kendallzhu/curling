@@ -1,7 +1,6 @@
 {
   "run": "small_m10",
   "checkpoint": "m_10.npz",
-  "checkpoint_path": "checkpoints/m_10.npz",
   "parameters": {
     "num_states": 200,
     "seed": 2026,
@@ -12,7 +11,7 @@
     ],
     "max_stones": 10
   },
-  "elapsed_seconds_for_all_runs": 12.108658125999682,
+  "elapsed_seconds_for_all_runs": 7.4250966330000665,
   "results": [
     {
       "run": "small_m10",

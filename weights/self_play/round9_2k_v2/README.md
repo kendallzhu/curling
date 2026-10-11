@@ -15,3 +15,5 @@ model, normalizer = sequential_training.load_model(
 ```
 
 `stats/training_stats.json` is the compact per-iteration record used when resuming training. `stats/training_metrics.json` feeds the checkpoint plots, and `stats/greedy_comparison.json` contains the paired greedy results. `stats/training_and_evaluation_stats.json` is a legacy combined snapshot from the earlier evaluation workflow; current code does not read or update it.
+
+`stats/initial_sequential_training/m_9_evaluation.json` records the initial second-to-last-turn model's train/validation loss history and evaluation stats. The self-play runner copies it from the sequential-training run when saving this run's results.

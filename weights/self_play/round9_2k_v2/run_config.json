@@ -33,6 +33,7 @@
   },
   "initial_dataset": "external:D_9.npz",
   "initial_model": "weights/sequential_training/round9_20k/checkpoints/m_9.npz",
+  "initial_training_stats": "stats/initial_sequential_training/m_9_evaluation.json",
   "network_training": {
     "batch_size": 100,
     "hidden_layer_size": 20,

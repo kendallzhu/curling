@@ -84,31 +84,38 @@ def generate_random_sheet_state_for_turn(
 
     ``turn`` stones are always present as columns (throws alternate teams,
     matching ``SheetStates.stone_teams()``'s parity-based team assignment),
-    but stones knocked out of play are zeroed out rather than removed, so
-    the two teams can end up with very different numbers of stones actually
-    in play. The whole batch shares one sampled knockout trace; only stone
-    positions differ per simulation.
+    but stones knocked out of play are zeroed out rather than removed. Each
+    simulation samples its own knockout history and stone positions.
     """
     if turn < 0:
         raise ValueError(f"turn must be >= 0, got {turn}")
 
     num_stones = turn
-    in_play = [True] * num_stones
-    for i in range(num_stones):
-        thrower = i % 2
-        if rng.random() < _TURN_REMOVE_PROB:
-            opponent = 1 - thrower
-            opponent_in_play = [j for j in range(i) if j % 2 == opponent and in_play[j]]
-            if opponent_in_play:
-                remove_count = 2 if rng.random() < _TURN_REMOVE_TWO_PROB else 1
-                remove_count = min(remove_count, len(opponent_in_play))
-                for idx in rng.choice(opponent_in_play, size=remove_count, replace=False):
-                    in_play[int(idx)] = False
+    x = np.empty((num_sims, num_stones), dtype=float)
+    y = np.empty((num_sims, num_stones), dtype=float)
+    for sim_index in range(num_sims):
+        in_play = [True] * num_stones
+        for i in range(num_stones):
+            thrower = i % 2
+            if rng.random() < _TURN_REMOVE_PROB:
+                opponent = 1 - thrower
+                opponent_in_play = [
+                    j for j in range(i) if j % 2 == opponent and in_play[j]
+                ]
+                if opponent_in_play:
+                    remove_count = 2 if rng.random() < _TURN_REMOVE_TWO_PROB else 1
+                    remove_count = min(remove_count, len(opponent_in_play))
+                    for idx in rng.choice(
+                        opponent_in_play, size=remove_count, replace=False
+                    ):
+                        in_play[int(idx)] = False
 
-    x, y = _sample_stone_positions(num_sims, num_stones, rng.uniform, rng.random)
-    in_play_mask = np.asarray(in_play, dtype=bool)
-    x = np.where(in_play_mask, x, NOT_IN_PLAY_X)
-    y = np.where(in_play_mask, y, NOT_IN_PLAY_X)
+        sim_x, sim_y = _sample_stone_positions(
+            1, num_stones, rng.uniform, rng.random
+        )
+        in_play_mask = np.asarray(in_play, dtype=bool)
+        x[sim_index] = np.where(in_play_mask, sim_x[0], NOT_IN_PLAY_X)
+        y[sim_index] = np.where(in_play_mask, sim_y[0], NOT_IN_PLAY_X)
 
     return state.SheetStates(
         first_team=np.zeros(num_sims, dtype=int),

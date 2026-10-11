@@ -1329,4 +1329,4 @@ def generate_final_dataset(models, *, k: int, fractions: Mapping[int, float], nu
 def save_metadata(path: str | Path, metadata: dict) -> None:
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(metadata, indent=2, sort_keys=True))
+    path.write_text(json.dumps(metadata, indent=2, sort_keys=True) + "\n")
