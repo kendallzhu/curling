@@ -393,11 +393,19 @@ def draw_panel(
 
     if hammer_team is not None:
         fill = (200, 50, 50) if hammer_team == 0 else (230, 200, 40)
-        center = ((red_cx, yellow_cx)[hammer_team], panel_y + 15)
-        pygame.draw.circle(surface, fill, center, 9)
-        pygame.draw.circle(surface, (255, 255, 255), center, 9, 2)
-        h_text = pygame.font.SysFont(None, 16).render("H", True, (0, 0, 0))
-        surface.blit(h_text, h_text.get_rect(center=center))
+        icon_x = score_x - 14 if hammer_team == 0 else score_x + score_text.get_width() + 14
+        center = (icon_x, panel_y + 38)
+        head = pygame.Rect(center[0] - 8, center[1] - 8, 15, 6)
+        pygame.draw.line(
+            surface, (255, 255, 255), (center[0] - 1, center[1] - 4),
+            (center[0] + 6, center[1] + 8), 5
+        )
+        pygame.draw.line(
+            surface, fill, (center[0] - 1, center[1] - 4),
+            (center[0] + 6, center[1] + 8), 3
+        )
+        pygame.draw.rect(surface, (255, 255, 255), head.inflate(2, 2))
+        pygame.draw.rect(surface, fill, head)
 
     return (
         btn_rect,
