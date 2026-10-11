@@ -68,6 +68,62 @@ def test_select_robust_throws_uses_weighted_angle_outcomes():
 })
 
 
+def _select_between_two_equal_candidates(seed, **kwargs):
+    states = state.empty_board(1)
+    candidates = bot.Throws(
+        angle_deg=np.array([1.0, 2.0]),
+        speed=np.ones(2),
+        turn=np.zeros(2, dtype=int),
+        y_val=np.zeros(2),
+        team=np.zeros(2, dtype=int),
+    )
+    selected = bot.select_robust_throws(
+        sheet_states=states,
+        candidate_throws=candidates,
+        exact_scores=np.array([1.0, 1.0]),
+        scoring_function=lambda _s, t: np.ones(t.angle_deg.size),
+        top_fraction=1.0,
+        rng=np.random.default_rng(seed),
+        **kwargs,
+    )
+    return float(selected.angle_deg[0])
+
+
+def test_randomly_pick_between_top_n_varies_among_ties():
+    picks = {_select_between_two_equal_candidates(seed) for seed in range(20)}
+    assert picks == {1.0, 2.0}
+
+
+def test_randomly_pick_between_top_n_one_is_deterministic():
+    picks = {
+        _select_between_two_equal_candidates(seed, randomly_pick_between_top_n=1)
+        for seed in range(20)
+    }
+    assert len(picks) == 1
+
+
+def test_random_candidates_must_be_within_excludes_worse_candidates():
+    states = state.empty_board(1)
+    candidates = bot.Throws(
+        angle_deg=np.array([1.0, 2.0]),
+        speed=np.ones(2),
+        turn=np.zeros(2, dtype=int),
+        y_val=np.zeros(2),
+        team=np.zeros(2, dtype=int),
+    )
+    for seed in range(20):
+        selected = bot.select_robust_throws(
+            sheet_states=states,
+            candidate_throws=candidates,
+            exact_scores=np.array([1.0, 0.5]),
+            scoring_function=lambda _s, t: np.where(t.angle_deg < 1.5, 1.0, 0.5),
+            top_fraction=1.0,
+            rng=np.random.default_rng(seed),
+            random_candidates_must_be_within=0.1,
+        )
+        assert selected.angle_deg[0] == 1.0
+
+
 def test_physics_ignores_not_in_play_placeholder_stones():
     board = SheetStates(
         first_team=np.array([0]),

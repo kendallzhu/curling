@@ -83,12 +83,21 @@ def _select_robust_throws_and_scores(
     scoring_function: Callable[[SheetStates, Throws], np.ndarray],
     perturbations: ThrowPerturbations = DEFAULT_THROW_PERTURBATIONS,
     top_fraction: float = 0.05,
+    randomly_pick_between_top_n: int = 2,
+    random_candidates_must_be_within: float = 0.1,
+    rng: np.random.Generator | None = None,
 ) -> tuple[Throws, np.ndarray, np.ndarray]:
     """Choose top exact candidates by their weighted perturbed value.
 
     Candidates use the standard candidate-major, state-minor layout. Exact
     scores are supplied by the caller, so only non-exact outcomes are scored.
+    Picks uniformly among the best `randomly_pick_between_top_n` candidates whose weighted value is
+    within `random_candidates_must_be_within` of the best.
     """
+    if randomly_pick_between_top_n < 1:
+        raise ValueError("randomly_pick_between_top_n must be >= 1")
+    if rng is None:
+        rng = np.random.default_rng()
     num_sims = sheet_states.x.shape[0]
     if num_sims == 0:
         return Throws(*(np.array([]) for _ in range(5))), np.array([]), np.array([])
@@ -129,7 +138,13 @@ def _select_robust_throws_and_scores(
         probabilities[exact_offset] * selected_exact_scores
         + noisy_scores @ perturbed_probabilities
     ).reshape(num_selected, num_sims)
-    winners = weighted_scores.argmax(axis=0)
+    n_pick = min(randomly_pick_between_top_n, num_selected)
+    order = np.argsort(weighted_scores, axis=0)[-n_pick:]
+    cols = np.arange(num_sims)
+    top_values = weighted_scores[order, cols]
+    eligible = top_values >= top_values.max(axis=0) - random_candidates_must_be_within
+    keys = np.where(eligible, rng.random(eligible.shape), -1.0)
+    winners = order[keys.argmax(axis=0), cols]
     chosen = top_candidates[winners, np.arange(num_sims)] * num_sims + np.arange(num_sims)
     return (
         Throws(
@@ -152,6 +167,9 @@ def select_robust_throws(
     scoring_function: Callable[[SheetStates, Throws], np.ndarray],
     perturbations: ThrowPerturbations = DEFAULT_THROW_PERTURBATIONS,
     top_fraction: float = 0.05,
+    randomly_pick_between_top_n: int = 2,
+    random_candidates_must_be_within: float = 0.1,
+    rng: np.random.Generator | None = None,
 ) -> Throws:
     """Choose top exact candidates by their weighted perturbed value."""
     selected_throws, _, _ = _select_robust_throws_and_scores(
@@ -161,6 +179,9 @@ def select_robust_throws(
         scoring_function=scoring_function,
         perturbations=perturbations,
         top_fraction=top_fraction,
+        randomly_pick_between_top_n=randomly_pick_between_top_n,
+        random_candidates_must_be_within=random_candidates_must_be_within,
+        rng=rng,
     )
     return selected_throws
 
@@ -335,6 +356,8 @@ class ArgmaxThrowPolicy(CurlingPolicy):
         rng: np.random.Generator | None = None,
         perturbations: ThrowPerturbations = DEFAULT_THROW_PERTURBATIONS,
         top_fraction: float = 0.05,
+        randomly_pick_between_top_n: int = 2,
+        random_candidates_must_be_within: float = 0.1,
     ) -> tuple[Throws, np.ndarray, np.ndarray]:
         repeated_throws, tiled_starting_states = self.throw_searcher.get_throws_for_num_sims(
             team=team, sheet_states=sheet_states
@@ -347,6 +370,9 @@ class ArgmaxThrowPolicy(CurlingPolicy):
             scoring_function=self.scoring_function,
             perturbations=perturbations,
             top_fraction=top_fraction,
+            randomly_pick_between_top_n=randomly_pick_between_top_n,
+            random_candidates_must_be_within=random_candidates_must_be_within,
+            rng=rng,
         )
 
     def make_throws(
