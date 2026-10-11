@@ -25,7 +25,7 @@ import state
 import stats
 from bot import (
     DEFAULT_THROW_PERTURBATIONS, RandomThrows, ThrowPerturbations,
-    ThrowSearcher, ThrowsGridSearcher, select_robust_throws,
+    ThrowSearcher, ThrowsGridSearcher, perturb_throws, select_robust_throws,
 )
 from physics_cache import cached_physics as shared_cached_physics
 
@@ -763,7 +763,8 @@ def model_candidate_diagnostics(
     }
 
 
-def rollout_to_terminal(sheet_states, models: Mapping[int, tuple[object, dataset.Normalizer]], max_stones: int, searcher: ThrowSearcher, perturbations=DEFAULT_THROW_PERTURBATIONS, top_fraction=0.05) -> tuple[state.SheetStates, np.ndarray]:
+def rollout_to_terminal(sheet_states, models: Mapping[int, tuple[object, dataset.Normalizer]], max_stones: int, searcher: ThrowSearcher, perturbations=DEFAULT_THROW_PERTURBATIONS, top_fraction=0.05, rng: np.random.Generator | None = None) -> tuple[state.SheetStates, np.ndarray]:
+    rng = rng if rng is not None else np.random.default_rng()
     current = sheet_states
     while current.x.shape[1] < max_stones:
         n = current.x.shape[1]
@@ -773,6 +774,7 @@ def rollout_to_terminal(sheet_states, models: Mapping[int, tuple[object, dataset
         else:
             model, normalizer = models[n + 1]
             throws = choose_model_throws(current, model, normalizer, max_stones, searcher, team, perturbations, top_fraction)
+        throws = perturb_throws(throws, perturbations, rng)
         current = cached_physics.run_until_stopping(sheet_states=current, throws=throws)
     return current, scoring.get_net_score_for_team(current, 0)
 
@@ -842,7 +844,7 @@ def generate_dataset(
     for start in range(0, num_rows, batch_size):
         count = min(batch_size, num_rows - start)
         initial = random_sheet_states(turn=i, num_sims=count, rng=rng)
-        _, scores = rollout_to_terminal(initial, models or {}, max_stones, searcher, perturbations, robust_top_fraction)
+        _, scores = rollout_to_terminal(initial, models or {}, max_stones, searcher, perturbations, robust_top_fraction, rng)
         parts_states.append(initial)
         parts_scores.append(scores)
         pending_states.append(initial)
@@ -917,7 +919,9 @@ def compare_policies(
     model_searcher=None,
     perturbations: ThrowPerturbations = DEFAULT_THROW_PERTURBATIONS,
     robust_top_fraction: float = 0.05,
+    rng: np.random.Generator | None = None,
 ) -> PolicyComparison:
+    rng = rng if rng is not None else np.random.default_rng()
     if sheet_states.x.shape[1] != i - 1:
         raise ValueError("comparison states must contain i-1 stones")
     searcher = searcher or make_default_throw_searcher()
@@ -928,13 +932,15 @@ def compare_policies(
         sheet_states, model, normalizer, max_stones, model_searcher, team, perturbations, robust_top_fraction
     )
     greedy_throw = choose_greedy_throws(sheet_states, searcher, team, perturbations, robust_top_fraction)
+    model_throw = perturb_throws(model_throw, perturbations, rng)
+    greedy_throw = perturb_throws(greedy_throw, perturbations, rng)
     _, model_scores = rollout_to_terminal(
         cached_physics.run_until_stopping(sheet_states=sheet_states, throws=model_throw),
-        models, max_stones, searcher, perturbations, robust_top_fraction
+        models, max_stones, searcher, perturbations, robust_top_fraction, rng
     )
     _, greedy_scores = rollout_to_terminal(
         cached_physics.run_until_stopping(sheet_states=sheet_states, throws=greedy_throw),
-        models, max_stones, searcher, perturbations, robust_top_fraction
+        models, max_stones, searcher, perturbations, robust_top_fraction, rng
     )
     return PolicyComparison(sheet_states, model_scores, greedy_scores, model_throw, greedy_throw)
 
@@ -961,6 +967,7 @@ def print_policy_comparison(
         raise ValueError("chunk_size must be positive")
     comparison_seed = seed + i
     state_rng = np.random.default_rng(comparison_seed)
+    perturbation_rng = np.random.default_rng(comparison_seed + 1)
     for comparison_searcher in (greedy_comparison_searcher, model_comparison_searcher):
         if isinstance(comparison_searcher, GridAndRandomThrowSearcher):
             comparison_searcher.random_searcher.rng = np.random.default_rng(
@@ -983,6 +990,7 @@ def print_policy_comparison(
             model_searcher=model_comparison_searcher,
             perturbations=perturbations,
             robust_top_fraction=robust_top_fraction,
+            rng=perturbation_rng,
         ))
 
     comparison = PolicyComparison(

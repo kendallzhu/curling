@@ -127,6 +127,7 @@ def compare_second_to_last_policies(
     throw_searcher: bot.ThrowSearcher,
     value_network,
     value_normalizer: dataset.Normalizer,
+    seed: int = 0,
 ) -> pl.DataFrame:
     """Compare value-ranked and actual-score-ranked second-to-last throws.
 
@@ -146,10 +147,14 @@ def compare_second_to_last_policies(
         ("value_network", value_second),
         ("grid_search", grid_second),
     ):
+        # Same seed per policy so both face identical noise draws.
+        noise = np.random.default_rng(seed)
+        second_throw = bot.perturb_throws(second_throw, rng=noise)
         after_second = cached_physics.run_until_stopping(
             sheet_states=state.add_stones_from_throws(sheet_states, second_throw)
         )
         last_throw = grid_search_best_throws(after_second, last_team, throw_searcher)
+        last_throw = bot.perturb_throws(last_throw, rng=noise)
         final_states = cached_physics.run_until_stopping(
             sheet_states=state.add_stones_from_throws(after_second, last_throw)
         )

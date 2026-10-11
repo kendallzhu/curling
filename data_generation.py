@@ -14,6 +14,7 @@ from bot import (
     RandomThrows,
     ThrowSearcher,
     ThrowsGridSearcher,
+    perturb_throws,
     select_robust_throws,
     score_throws_by_net_score,
 )
@@ -211,6 +212,7 @@ def value_network_training_data(
             f"team {team} is not next to play (next_team_to_play={next_team})"
         )
     last_throws = _grid_search_throws(sheet_states, team, rng)
+    last_throws = perturb_throws(last_throws, rng=rng)
     final_states = cached_physics.run_until_stopping(
         sheet_states=state.add_stones_from_throws(sheet_states, last_throws)
     )
