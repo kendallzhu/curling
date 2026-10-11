@@ -1,5 +1,10 @@
 """Pytest session-wide checks."""
 
+import os
+
+# Must be set before numba is imported; many threads make tiny single-board kernel calls very slow.
+os.environ.setdefault("NUMBA_NUM_THREADS", "4")
+
 from time import perf_counter
 
 import pytest

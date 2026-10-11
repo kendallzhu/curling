@@ -45,7 +45,7 @@ class CurlingPolicy(Protocol):
 class ThrowPerturbations:
     """Discrete release-angle outcomes used to rank candidate throws."""
 
-    angle_offsets_deg: tuple[float, ...] = (0.0, -0.1, 0.1)
+    angle_offsets_deg: tuple[float, ...] = (0.0, -0.2, 0.2)
     probabilities: tuple[float, ...] = (0.5, 0.25, 0.25)
 
     def __post_init__(self):
@@ -56,6 +56,27 @@ class ThrowPerturbations:
 
 
 DEFAULT_THROW_PERTURBATIONS = ThrowPerturbations()
+
+
+def perturb_throws(
+    throws: Throws,
+    perturbations: ThrowPerturbations = DEFAULT_THROW_PERTURBATIONS,
+    rng: np.random.Generator | None = None,
+) -> Throws:
+    """Sample one release-angle offset per throw."""
+    rng = rng if rng is not None else np.random.default_rng()
+    offsets = rng.choice(
+        np.asarray(perturbations.angle_offsets_deg),
+        size=len(throws.angle_deg),
+        p=perturbations.probabilities,
+    )
+    return Throws(
+        angle_deg=np.asarray(throws.angle_deg) + offsets,
+        speed=throws.speed,
+        turn=throws.turn,
+        y_val=throws.y_val,
+        team=throws.team,
+    )
 
 
 def perturb_throw(

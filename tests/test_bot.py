@@ -45,6 +45,7 @@ def test_robust_throw_selection_should_use_weighted_angle_outcomes():
         candidate_throws=candidates,
         exact_scores=exact_scores,
         scoring_function=score_throws,
+        perturbations=bot.ThrowPerturbations((0.0, -0.1, 0.1), (0.5, 0.25, 0.25)),
     )
 
     observed = {

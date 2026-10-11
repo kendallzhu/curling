@@ -19,7 +19,10 @@ import dataset
 import nn
 import scoring
 import state
-from bot import ThrowPerturbations, ThrowsGridSearcher, select_robust_throws
+from bot import (
+    DEFAULT_THROW_PERTURBATIONS, ThrowPerturbations, ThrowsGridSearcher,
+    perturb_throws, select_robust_throws,
+)
 import sequential_training as seq
 
 
@@ -39,10 +42,7 @@ class SelfPlayConfig:
     learning_rate: float = 0.5
     validation_fraction: float = 0.0
     robust_top_fraction: float = 0.05
-    perturbations: ThrowPerturbations = ThrowPerturbations(
-        angle_offsets_deg=(0.0, -0.2, 0.2),
-        probabilities=(0.5, 0.25, 0.25),
-    )
+    perturbations: ThrowPerturbations = DEFAULT_THROW_PERTURBATIONS
 
     def retention_probability(self) -> float:
         if self.halflife <= 0:
@@ -155,11 +155,13 @@ def generate_self_play_batch(
             config.perturbations, config.robust_top_fraction,
         )
         current = seq.cached_physics.run_until_stopping(
-            sheet_states=current, throws=model_throw
+            sheet_states=current,
+            throws=perturb_throws(model_throw, config.perturbations, rng),
         )
         training_states.append(current)
 
     team = int(current.next_team_to_play()[0])
+
     def actual_utility(states):
         return scoring.get_net_score_for_team(states, team)
 
@@ -168,7 +170,8 @@ def generate_self_play_batch(
         config.perturbations, config.robust_top_fraction,
     )
     final_state = seq.cached_physics.run_until_stopping(
-        sheet_states=current, throws=final_throw
+        sheet_states=current,
+        throws=perturb_throws(final_throw, config.perturbations, rng),
     )
     final_scores = scoring.get_net_score_for_team(final_state, 0)
 
@@ -550,8 +553,12 @@ def _rollout_policy_group(
     grid_size: tuple[int, int, int],
     max_stones: int,
     record_throws: bool,
+    perturbations: ThrowPerturbations = DEFAULT_THROW_PERTURBATIONS,
+    perturbation_seed: int = 0,
 ) -> tuple[np.ndarray, list[list[state.Throw]] | None]:
     """Roll out a policy group and optionally retain each game's throws."""
+    # Fixed seed gives every policy the same noise draw per game and turn.
+    perturbation_rng = np.random.default_rng(perturbation_seed)
     current = initial_states
     searcher = ThrowsGridSearcher(*grid_size)
     throw_history = [[] for _ in range(initial_states.x.shape[0])] if record_throws else None
@@ -566,6 +573,7 @@ def _rollout_policy_group(
             )
         else:
             throws = _greedy_grid_throw(current, searcher)
+        throws = perturb_throws(throws, perturbations, perturbation_rng)
         if throw_history is not None:
             for game_index in range(len(throw_history)):
                 throw_history[game_index].append(throws.get_throw(game_index))

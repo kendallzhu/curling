@@ -471,7 +471,7 @@ def handle_mouse_input(
                 y_val=ui_state.y_val,
                 team=next_team_to_play,
             )
-            next_sheet_states = add_new_stone(next_sheet_states, throw)
+            next_sheet_states = add_new_stone(next_sheet_states, perturb_throw(throw))
         elif bot_btn_rect.collidepoint(mx, my) and ui_state.bot_throw:
             if not current_sheet_states.is_any_stone_moving():
                 next_sheet_states = _apply_suggested_throw(
