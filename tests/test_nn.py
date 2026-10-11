@@ -10,7 +10,7 @@ def assert_allclose(actual, expected, *, rtol=RTOL, atol=ATOL):
     np.testing.assert_allclose(actual, expected, rtol=rtol, atol=atol)
 
 
-def test_softmax_is_stable_for_large_logits():
+def test_softmax_should_remain_finite_for_large_logits():
     logits = np.array([[[1000.0], [1001.0], [999.0]]])
 
     probabilities = nn.softmax(logits)
@@ -19,7 +19,7 @@ def test_softmax_is_stable_for_large_logits():
     assert_allclose(probabilities.sum(axis=1), np.ones((1, 1)))
 
 
-def test_train_updates_linear_weights_using_average_gradient():
+def test_training_should_average_gradients_across_the_batch():
     model = nn.NN([nn.Linear(np.array([[2.0, -1.0]]))])
     batch = nn.TrainingBatch(
         input_features=np.array([[1.0, 0.0], [0.0, 1.0]]),
@@ -42,7 +42,7 @@ def test_train_updates_linear_weights_using_average_gradient():
     assert_allclose(average_loss, 1.0)
 
 
-def test_train_applies_regularization_to_linear_weight_update():
+def test_training_should_apply_weight_regularization():
     model = nn.NN([nn.Linear(np.array([[2.0, -1.0]]))])
     batch = nn.TrainingBatch(
         input_features=np.array([[1.0, 0.0], [0.0, 1.0]]),
@@ -64,7 +64,7 @@ def test_train_applies_regularization_to_linear_weight_update():
     assert_allclose(model.layers[0].bias, expected_bias)
 
 
-def test_train_backpropagates_through_two_linear_layers_and_activation():
+def test_training_should_backpropagate_through_layers_and_activation():
     model = nn.NN(
         [
             nn.Linear(np.array([[1.0, -1.0], [0.5, 0.5]])),

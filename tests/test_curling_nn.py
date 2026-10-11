@@ -8,7 +8,7 @@ import data_generation
 import dataset
 
 
-def test_write_and_load_v_weights(tmp_path):
+def test_value_weights_should_round_trip(tmp_path):
     num_stones = 8
     num_stones_per_side = 5
     neural_network = curling_nn.ValueNetwork(
@@ -42,7 +42,7 @@ def test_write_and_load_v_weights(tmp_path):
     np.testing.assert_allclose(loaded_norm.feature_stdevs, normalizer.feature_stdevs)
 
 
-def test_load_v_weights_rejects_legacy_feature_width(tmp_path):
+def test_value_weights_should_reject_legacy_feature_width(tmp_path):
     path = tmp_path / "legacy_weights.npz"
     np.savez(
         path,
@@ -56,7 +56,7 @@ def test_load_v_weights_rejects_legacy_feature_width(tmp_path):
         curling_nn.load_v_weights(path)
 
 
-def test_load_v_weights_handles_unversioned_and_unknown_versions(tmp_path):
+def test_value_weights_should_accept_unversioned_and_reject_unknown_versions(tmp_path):
     neural_network = curling_nn.ValueNetwork(seed=0, num_stones=2)
     normalizer = dataset.Normalizer(
         feature_means=np.zeros(curling_nn.value_feature_width(2)),
@@ -82,7 +82,7 @@ def test_load_v_weights_handles_unversioned_and_unknown_versions(tmp_path):
         curling_nn.load_v_weights(path)
 
 
-def test_value_network_accepts_padded_features():
+def test_value_network_should_accept_padded_features():
     sheet_states = data_generation.random_sheet_states(team1=5, team2=4, num_sims=3)
     raw = curling_nn.ValueInputFeatures.raw_of_sheet_states(sheet_states, 10)
     normalizer = dataset.Normalizer.from_features(raw)
@@ -106,7 +106,7 @@ def test_value_network_accepts_padded_features():
     assert expected.shape == (3,)
 
 
-def test_value_features_match_variable_board_turns():
+def test_padded_value_features_should_support_variable_board_turns():
     boards = [
         data_generation.generate_random_sheet_state_for_turn(
             turn=turn, num_sims=1, rng=np.random.default_rng(turn)
@@ -121,7 +121,22 @@ def test_value_features_match_variable_board_turns():
     np.testing.assert_array_equal(features[0][0, 18:21], np.zeros(3))
 
 
-def test_print_trainable_parameter_info(capsys):
+def test_score_match_dataset_should_encode_one_hot_answers_over_possible_scores():
+    sheet_states = data_generation.random_sheet_states(
+        team1=1, team2=0, num_sims=2, rng=np.random.default_rng(0)
+    )
+
+    data = curling_nn.ValueInputFeatures.create_score_match_dataset_from_sheet_states(
+        sheet_states,
+        final_scores=np.array([-1, 1]),
+        num_stones_per_side=1,
+        max_stones=2,
+    )
+
+    np.testing.assert_array_equal(data.answers, [[1, 0, 0], [0, 0, 1]])
+
+
+def test_parameter_report_should_print_layer_shapes_and_total_count(capsys):
     neural_network = curling_nn.ValueNetwork(
         seed=0,
         num_stones=8,

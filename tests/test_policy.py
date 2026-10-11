@@ -7,7 +7,7 @@ import state
 from constants import NOT_IN_PLAY_X
 
 
-def test_value_network_scoring_flips_to_throwing_team_perspective(monkeypatch):
+def test_value_policy_should_score_from_throwing_team_perspective(monkeypatch):
     network = curling_nn.ValueNetwork(seed=0, num_stones=2, hidden_layer_size=4)
     network.expected_score = lambda outputs: np.full(outputs.shape[0], 2.0)
     normalizer = dataset.Normalizer(
@@ -43,7 +43,7 @@ def test_value_network_scoring_flips_to_throwing_team_perspective(monkeypatch):
     np.testing.assert_array_equal(scores, [2.0, -2.0])
 
 
-def test_robustness_selects_consistent_throw_over_fragile_peak():
+def test_robust_throw_selection_should_prefer_consistency_over_fragile_peak():
     """A throw that is solid across angle offsets beats a throw with a fragile exact peak."""
     sheet = state.empty_board(1)
     candidates = state.Throws(
@@ -70,7 +70,7 @@ def test_robustness_selects_consistent_throw_over_fragile_peak():
     assert chosen.angle_deg[0] == 5.0
 
 
-def test_padded_value_features_mark_thrown_and_future_slots():
+def test_padded_value_features_should_mark_thrown_and_future_slots():
     board = state.SheetStates(
         first_team=np.array([0]),
         x=np.array([[38.0, NOT_IN_PLAY_X]]),

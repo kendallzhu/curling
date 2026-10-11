@@ -19,7 +19,7 @@ class Data:
         self.answers = np.asarray(answers)
 
 
-def test_stats_use_actual_score_and_calculate_basic_metrics():
+def test_prediction_stats_should_use_actual_scores_and_report_basic_metrics():
     answers = np.eye(3)[[0, 1, 2, 1]]
     logits = np.array([
         [4, 0, 0],
@@ -42,7 +42,7 @@ def test_stats_use_actual_score_and_calculate_basic_metrics():
     assert sum(bucket.count for bucket in result.calibration) == 12
 
 
-def test_calibration_tracks_binary_events_for_each_score():
+def test_calibration_should_track_binary_events_for_each_score():
     answers = np.array([0, 1, 1, 0])
     logits = np.log(np.array([
         [0.8, 0.2],
@@ -62,7 +62,7 @@ def test_calibration_tracks_binary_events_for_each_score():
     np.testing.assert_allclose(bucket.actual_fraction, 0.5)
 
 
-def test_integer_score_labels_are_supported():
+def test_prediction_stats_should_support_integer_score_labels():
     predictions = stats.create_prediction_dataframe(
         FixedNetwork([[3, 0, 0], [0, 3, 0]]), Data([-1, 0])
     )
@@ -70,7 +70,7 @@ def test_integer_score_labels_are_supported():
     assert result.correct_score_probability.value > 0.9
 
 
-def test_stats_have_compact_human_readable_text():
+def test_stats_should_format_compact_human_readable_text():
     result = stats.NeuralNetStats(
         r_squared=stats.Estimate(0.428296, 0.001214),
         correct_score_probability=stats.Estimate(0.383998, 0.009516),
@@ -85,7 +85,7 @@ def test_stats_have_compact_human_readable_text():
 
 
 @pytest.mark.slow
-def test_combined_stats_plot_has_calibration_and_loss_panels():
+def test_stats_plot_should_include_calibration_and_loss_panels():
     matplotlib = pytest.importorskip("matplotlib")
     matplotlib.use("Agg")
     result = stats.NeuralNetStats(
@@ -102,7 +102,7 @@ def test_combined_stats_plot_has_calibration_and_loss_panels():
 
 
 @pytest.mark.slow
-def test_combined_stats_plot_can_include_diagnostic_snapshots():
+def test_stats_plot_should_include_diagnostic_snapshots():
     matplotlib = pytest.importorskip("matplotlib")
     matplotlib.use("Agg")
     result = stats.NeuralNetStats(
@@ -122,7 +122,7 @@ def test_combined_stats_plot_can_include_diagnostic_snapshots():
     matplotlib.pyplot.close(axes[0].figure)
 
 
-def test_stats_fail_with_example_when_probabilities_do_not_sum_to_one(monkeypatch):
+def test_stats_should_show_example_when_probabilities_do_not_sum_to_one(monkeypatch):
     original_softmax = stats.nn.softmax
 
     def invalid_softmax(logits):

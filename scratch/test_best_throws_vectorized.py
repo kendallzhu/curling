@@ -29,7 +29,7 @@ class FakeSearcher:
         return throws, state.tile_sheet_states(sheet_states, 3)
 
 
-def test_vectorized_best_throws_uses_shared_fixed_angle_robustness():
+def test_vectorized_best_throws_should_use_shared_fixed_angle_robustness():
     def score_candidates(sheet_states, throws):
         return throws.angle_deg
 

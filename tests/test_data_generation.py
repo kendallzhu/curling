@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 from inline_snapshot import snapshot
 
 from constants import center_of_target_house
@@ -9,7 +10,7 @@ from data_generation import (
 )
 
 
-def test_random_sheet_states_returns_expected_shape_and_counts():
+def test_random_sheet_states_should_match_requested_shape_and_team_counts():
     sheet_states = random_sheet_states(team1=3, team2=2)
 
     assert sheet_states.x.shape == (1, 5)
@@ -22,9 +23,10 @@ def test_random_sheet_states_returns_expected_shape_and_counts():
     assert np.all(sheet_states.rotation_directions == 0)
 
 
-def test_random_sheet_states_guard_stones_are_outside_house():
-    np.random.seed(42)
-    sheet_states = random_sheet_states(team1=10, team2=0)
+def test_random_sheet_states_should_place_guard_stones_outside_house():
+    sheet_states = random_sheet_states(
+        team1=10, team2=0, rng=np.random.default_rng(42)
+    )
     x = sheet_states.x[0]
     y = sheet_states.y[0]
 
@@ -33,22 +35,19 @@ def test_random_sheet_states_guard_stones_are_outside_house():
     assert np.all((y[guard_mask] >= 2.5 - 1.0) & (y[guard_mask] <= 2.5 + 1.0))
 
 
-def test_generate_random_sheet_state_for_turn_zero_is_empty():
+def test_turn_state_generation_should_return_empty_board_at_turn_zero():
     sheet_states = generate_random_sheet_state_for_turn(
         turn=0, num_sims=4, rng=np.random.default_rng(0)
     )
     assert sheet_states.x.shape == (4, 0)
 
 
-def test_generate_random_sheet_state_for_turn_rejects_negative_turn():
-    try:
+def test_turn_state_generation_should_reject_negative_turns():
+    with pytest.raises(ValueError):
         generate_random_sheet_state_for_turn(turn=-1, rng=np.random.default_rng(0))
-    except ValueError:
-        return
-    assert False, "expected ValueError for negative turn"
 
 
-def test_generate_random_sheet_state_for_turn_column_count_matches_turn():
+def test_turn_state_generation_should_keep_one_column_per_turn():
     # num_stones always equals turn exactly now (throws alternate teams, so
     # column count can't be stochastic without breaking stone_teams() parity).
     rng = np.random.default_rng(1)
@@ -59,7 +58,7 @@ def test_generate_random_sheet_state_for_turn_column_count_matches_turn():
         assert 0 <= in_play <= turn
 
 
-def test_generate_random_sheet_state_for_turn_same_seed_is_reproducible():
+def test_turn_state_generation_should_be_reproducible_for_same_seed():
     # Same seed sequence must give byte-identical output; no hardcoded
     # magic numbers, so this can't go flaky if the process model changes.
     states_a = [
@@ -75,7 +74,7 @@ def test_generate_random_sheet_state_for_turn_same_seed_is_reproducible():
         np.testing.assert_array_equal(a.y, b.y)
 
 
-def test_turn_state_batch_matches_independent_histories():
+def test_turn_state_generation_should_match_independent_histories_in_batches():
     turn = 6
     num_sims = 64
     batched = generate_random_sheet_state_for_turn(
@@ -96,7 +95,7 @@ def test_turn_state_batch_matches_independent_histories():
     assert np.unique(batched.x != 0, axis=0).shape[0] > 1
 
 
-def test_generate_random_sheet_state_for_turn_in_play_count_snapshot():
+def test_turn_state_generation_should_match_seeded_in_play_counts():
     # Regenerate with: venv/bin/python -m pytest --inline-snapshot=fix <this file>
     rng = np.random.default_rng(123)
     in_play_counts = [
@@ -110,7 +109,7 @@ def test_generate_random_sheet_state_for_turn_in_play_count_snapshot():
     assert in_play_counts == snapshot([0, 1, 1, 1, 1, 3, 3, 2, 4, 3])
 
 
-def test_generate_random_sheet_state_for_turn_supports_asymmetric_team_counts():
+def test_turn_state_generation_should_preserve_asymmetric_team_counts():
     # Default knockout probabilities, chosen seed/turn just happen to leave
     # team 0 with more stones in play than team 1.
     turn = 8
@@ -143,8 +142,10 @@ def test_generate_random_sheet_state_for_turn_supports_asymmetric_team_counts():
     assert sum(in_play for team, in_play in stones if team == 1) == 1
 
 
-def test_value_network_training_data_labels_final_score():
-    sheet_states = random_sheet_states(team1=1, team2=0, num_sims=2)
+def test_value_network_training_data_should_return_one_hot_score_targets():
+    sheet_states = random_sheet_states(
+        team1=1, team2=0, num_sims=2, rng=np.random.default_rng(0)
+    )
     assert np.all(sheet_states.next_team_to_play() == 1)
     data = value_network_training_data(
         sheet_states=sheet_states,
@@ -153,6 +154,5 @@ def test_value_network_training_data_labels_final_score():
     )
     assert data.size() == 2
     assert data.raw_inputs.shape == (2, 1 + 6 * 2)
-    # One throw left; end has 2 stones, scores in [-1, 1].
     assert data.answers.shape == (2, 3)
     np.testing.assert_array_equal(data.answers.sum(axis=1), 1)

@@ -7,7 +7,7 @@ from scratch.throw_geometry_statistics import (
 from state import Throws
 
 
-def test_geometry_statistics_uses_same_spin_and_normalized_coordinates():
+def test_throw_geometry_stats_should_use_same_spin_and_normalized_coordinates():
     throws = Throws(
         angle_deg=np.array([-4.0, 4.0, -4.0, 0.0]),
         speed=np.array([2.0, 2.0, 2.0, 2.25]),
@@ -27,7 +27,7 @@ def test_geometry_statistics_uses_same_spin_and_normalized_coordinates():
     assert np.all((result.distance_percentiles >= 0) & (result.distance_percentiles <= 100))
 
 
-def test_geometry_statistics_returns_nan_when_lower_score_spin_is_missing():
+def test_throw_geometry_stats_should_return_nan_when_lower_score_spin_is_missing():
     throws = Throws(
         angle_deg=np.array([0.0, 0.0]),
         speed=np.array([2.25, 2.25]),
@@ -44,7 +44,7 @@ def test_geometry_statistics_returns_nan_when_lower_score_spin_is_missing():
     assert np.isnan(result.distance_percentiles[0])
 
 
-def test_nearest_throw_score_distribution_excludes_the_throw_itself():
+def test_nearest_throw_scores_should_exclude_the_throw_itself():
     throws = Throws(
         angle_deg=np.array([-4.0, 0.0, 4.0]),
         speed=np.full(3, 2.25),

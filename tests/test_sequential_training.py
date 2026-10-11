@@ -22,7 +22,7 @@ class _CountingBackend:
         return sheet_states
 
 
-def test_physics_cache_persists_whole_vectorized_batches(tmp_path):
+def test_physics_cache_should_persist_whole_vectorized_batches(tmp_path):
     one = data_generation.random_sheet_states(
         team1=1, team2=0, num_sims=1, rng=np.random.default_rng(5)
     )
@@ -47,7 +47,7 @@ def test_physics_cache_persists_whole_vectorized_batches(tmp_path):
     assert reopened.cache.stats()["hits"] == 1
 
 
-def test_seeded_setup_random_states_and_throws_are_repeatable():
+def test_seeded_experiment_setup_should_repeat_states_and_throws():
     first = sequential.make_experiment_setup("turn_based", seed=17)
     second = sequential.make_experiment_setup("turn_based", seed=17)
     first_states = first.random_sheet_states(turn=3, num_sims=4, rng=np.random.default_rng(17))
@@ -59,7 +59,7 @@ def test_seeded_setup_random_states_and_throws_are_repeatable():
     np.testing.assert_array_equal(first_throws.y_val, second_throws.y_val)
 
 
-def test_show_state_generator_versions(capsys):
+def test_state_generator_report_should_list_available_and_removed_versions(capsys):
     sequential.show_state_generator_versions()
     output = capsys.readouterr().out
     assert "legacy_full" in output
@@ -67,7 +67,7 @@ def test_show_state_generator_versions(capsys):
     assert "removed" in output
 
 
-def test_padded_features_have_fixed_width_and_one_hot_throw_flags():
+def test_padded_features_should_have_fixed_width_and_one_hot_throw_flags():
     states = data_generation.random_sheet_states(team1=2, team2=1, num_sims=3)
     raw = sequential.raw_padded_sheet_state_features(states, max_stones=6)
 
@@ -78,7 +78,7 @@ def test_padded_features_have_fixed_width_and_one_hot_throw_flags():
     np.testing.assert_array_equal(raw[:, 13 + 3 : 13 + 6], 0)
 
 
-def test_sequential_dataset_round_trip(tmp_path):
+def test_sequential_dataset_should_round_trip(tmp_path):
     states = data_generation.random_sheet_states(team1=2, team2=1, num_sims=3)
     original = sequential.SequentialDataset(states, np.array([-1, 0, 1]), 6, 3)
     path = tmp_path / "dataset.npz"
@@ -91,7 +91,7 @@ def test_sequential_dataset_round_trip(tmp_path):
     assert loaded.max_stones == 6
 
 
-def test_final_dataset_uses_soft_model_predictions():
+def test_final_dataset_generation_should_use_soft_model_predictions():
     states = data_generation.random_sheet_states(team1=1, team2=0, num_sims=2)
     model = sequential.make_model(seed=0, max_stones=2, num_stones_per_side=1)
     normalizer = sequential.dataset.Normalizer.from_features(
@@ -105,7 +105,7 @@ def test_final_dataset_uses_soft_model_predictions():
     np.testing.assert_allclose(data.answers.sum(axis=1), 1.0)
 
 
-def test_policy_summary_reports_paired_outcomes():
+def test_policy_summary_should_report_paired_outcomes():
     comparison = sequential.PolicyComparison(
         initial_states=None,
         model_scores=np.array([1, 0, -1]),
@@ -120,7 +120,7 @@ def test_policy_summary_reports_paired_outcomes():
     assert summary["model_loss_probability"] == 0
 
 
-def test_policy_comparison_is_chunked(monkeypatch, tmp_path):
+def test_policy_comparison_should_process_simulations_in_chunks(monkeypatch, tmp_path):
     calls = []
 
     def fake_compare(i, sheet_states, models, **kwargs):
@@ -155,7 +155,7 @@ def test_policy_comparison_is_chunked(monkeypatch, tmp_path):
     assert (tmp_path / "policy_comparison_1.npz").exists()
 
 
-def test_model_checkpoint_round_trip(tmp_path):
+def test_model_checkpoints_should_round_trip(tmp_path):
     model = sequential.make_model(seed=0, max_stones=4, num_stones_per_side=2)
     normalizer = sequential.dataset.Normalizer(
         np.zeros(sequential.feature_width(4)), np.ones(sequential.feature_width(4))
@@ -173,7 +173,7 @@ def test_model_checkpoint_round_trip(tmp_path):
     np.testing.assert_array_equal(loaded_normalizer.feature_means, normalizer.feature_means)
 
 
-def test_load_sequential_models_discovers_checkpoints(tmp_path):
+def test_sequential_model_loader_should_discover_checkpoints(tmp_path):
     for i in (8, 9):
         model = sequential.make_model(seed=i, max_stones=10, num_stones_per_side=5)
         normalizer = sequential.dataset.Normalizer(
@@ -187,7 +187,7 @@ def test_load_sequential_models_discovers_checkpoints(tmp_path):
     assert set(models) == {8, 9}
 
 
-def test_default_throw_searcher_combines_grid_and_random_candidates():
+def test_default_throw_searcher_should_combine_grid_and_random_candidates():
     states = data_generation.random_sheet_states(team1=1, team2=0, num_sims=2)
     searcher = sequential.make_default_throw_searcher(seed=0)
     throws, tiled_states = searcher.get_throws_for_num_sims(team=1, sheet_states=states)
@@ -195,7 +195,7 @@ def test_default_throw_searcher_combines_grid_and_random_candidates():
     assert tiled_states.x.shape[0] == throws.angle_deg.size
 
 
-def test_dataset_generation_reports_diagnostic_checkpoints(tmp_path):
+def test_dataset_generation_should_report_diagnostic_checkpoints(tmp_path):
     checkpoints = []
 
     def callback(data, train_size):
@@ -216,7 +216,7 @@ def test_dataset_generation_reports_diagnostic_checkpoints(tmp_path):
     assert checkpoints == [(2, 1), (3, 2)]
 
 
-def test_diagnostic_jsonl_reports_training_dataset_size(tmp_path):
+def test_diagnostic_jsonl_should_report_training_dataset_size(tmp_path):
     states = data_generation.random_sheet_states(team1=1, team2=0, num_sims=2)
     generated = sequential.SequentialDataset(states, np.array([-1, 1]), 2, 1)
 

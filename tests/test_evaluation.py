@@ -7,7 +7,7 @@ import dataset
 import evaluation
 
 
-def test_sheet_state_evaluation_round_trip(tmp_path):
+def test_evaluation_state_files_should_round_trip(tmp_path):
     original = evaluation.generate_second_to_last_evaluation_states(
         seed=0, num_sims=2
     )
@@ -26,7 +26,7 @@ def test_sheet_state_evaluation_round_trip(tmp_path):
 
 
 @pytest.mark.slow
-def test_second_to_last_policy_comparison_has_both_policies(tmp_path):
+def test_second_to_last_policy_comparison_should_include_both_policies(tmp_path):
     states = evaluation.generate_second_to_last_evaluation_states(
         seed=0, num_sims=2
     )

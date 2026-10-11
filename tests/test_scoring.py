@@ -16,14 +16,14 @@ def _make_stationary_sheet(x: np.ndarray, y: np.ndarray, first_team: int = 0) ->
     )
 
 
-def test_empty_board_scores_zero():
+def test_empty_board_should_score_zero():
     empty = _make_stationary_sheet(np.zeros((2, 0)), np.zeros((2, 0)))
     scores = get_score(empty)
     np.testing.assert_array_equal(scores, np.zeros((2, 2), dtype=int))
     np.testing.assert_array_equal(get_net_score_for_team(empty, 0), np.zeros(2, dtype=int))
 
 
-def test_stones_outside_house_score_zero():
+def test_stones_outside_house_should_score_zero():
     # Place stones well outside the house radius
     outside_x = np.array([[center_of_target_house + house_outer_circle_radius + 5.0, 10.0]])
     outside_y = np.array([[2.5, 2.5]])
@@ -31,7 +31,7 @@ def test_stones_outside_house_score_zero():
     np.testing.assert_array_equal(get_score(sheet), np.array([[0, 0]]))
 
 
-def test_scoring_multi_stone_count_and_net_score():
+def test_scoring_should_count_stones_and_compute_net_score():
     # Stone 0 (team 0): at center (dist = 0.0)
     # Stone 1 (team 1): in house (dist = 1.0)
     # Stone 2 (team 0): in house (dist = 0.5)
